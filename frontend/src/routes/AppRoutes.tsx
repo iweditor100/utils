@@ -30,6 +30,7 @@ import Videos from "../pages/UiElements/Videos";
 import LineChart from "../pages/Charts/LineChart";
 import BarChart from "../pages/Charts/BarChart";
 import NotFound from "../pages/OtherPage/NotFound";
+import CalendarReplica from "../experimental/calendar-replica/CalendarReplica";
 
 export const AppRoutes = () => {
     return (
@@ -73,6 +74,8 @@ export const AppRoutes = () => {
                 <Route path="/line-chart" element={<LineChart />} />
                 <Route path="/bar-chart" element={<BarChart />} />
             </Route>
+
+            <Route path="/ui-test/calendar-replica" element={<CalendarReplica/>}/>
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />
