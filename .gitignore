@@ -1,0 +1,83 @@
+############################################
+# GLOBAL
+############################################
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment variables (ALL)
+.env
+.env.*
+!.env.example
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+############################################
+# BACKEND
+############################################
+
+# Dependencies
+backend/node_modules/
+
+# Build output
+backend/dist/
+backend/build/
+
+# Prisma
+backend/prisma/migrations/
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/node_modules/.prisma/
+
+# TypeScript
+backend/*.tsbuildinfo
+
+# env of backend: 
+backend/.env
+
+# env of client: 
+client/.env 
+############################################
+# FRONTEND
+############################################
+
+# don't push the code of frontend2: 
+frontend2/
+
+# Dependencies
+frontend/node_modules/
+
+# Build output (any framework)
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+frontend/.vite/
+frontend/.cache/
+
+# Framework caches
+frontend/.turbo/
+frontend/.svelte-kit/
+
+# env of frontend: 
+frontend/.env
+
+
+
+############################################
+# PACKAGE MANAGERS
+############################################
+
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+/workers/
