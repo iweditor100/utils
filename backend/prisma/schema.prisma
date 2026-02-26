@@ -29,6 +29,7 @@ model User {
   refreshTokens              RefreshToken[]
   sessions                   Session[]
   serviceAreas               ServiceArea[]
+  userSetting                UserSetting?
 
   @@index([deletedAt])
   @@map("users")
@@ -245,6 +246,18 @@ model ServiceArea {
   @@map("service_areas")
 }
 
+
+model UserSetting {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  meta      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
 
 enum UserStatus {
   ACTIVE
