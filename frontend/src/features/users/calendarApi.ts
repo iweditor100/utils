@@ -56,6 +56,13 @@ export const calendarApi = createApi({
             }),
             // invalidatesTags: ["CalendarEvent"],
         }),
+
+        deleteAllEvents: builder.mutation<ApiSuccess<{ count: number }>, void>({
+            query: () => ({
+                url: "/events/all",
+                method: "DELETE",
+            }),
+        }),
     }),
 });
 
@@ -64,4 +71,5 @@ export const {
     useCreateEventMutation,
     useUpdateEventMutation,
     useDeleteEventMutation,
+    useDeleteAllEventsMutation,
 } = calendarApi;

@@ -7,6 +7,8 @@ import { setAxiosStateGetter } from '../services/axiosClient'
 import { calendarApi } from '../features/users/calendarApi';
 import { googleCalendarApi } from '../features/google/googleCalendarApi';
 import { serviceAreaApi } from '../features/serviceAreas/serviceAreaApi';
+import { availabilityApi } from '../features/users/availabilityApi';
+import { userSettingsApi } from '../features/users/userSettingsApi';
 
 export const store = configureStore({
     reducer: {
@@ -17,9 +19,11 @@ export const store = configureStore({
         [calendarApi.reducerPath]: calendarApi.reducer,
         [googleCalendarApi.reducerPath]: googleCalendarApi.reducer,
         [serviceAreaApi.reducerPath]: serviceAreaApi.reducer,
+        [availabilityApi.reducerPath]: availabilityApi.reducer,
+        [userSettingsApi.reducerPath]: userSettingsApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-        getDefaultMiddleware().concat(authApi.middleware, usersApi.middleware, uploadsApi.middleware, calendarApi.middleware, googleCalendarApi.middleware, serviceAreaApi.middleware),
+        getDefaultMiddleware().concat(authApi.middleware, usersApi.middleware, uploadsApi.middleware, calendarApi.middleware, googleCalendarApi.middleware, serviceAreaApi.middleware, availabilityApi.middleware, userSettingsApi.middleware),
     devTools: import.meta.env.VITE_NODE_ENV !== "production",
 });
 

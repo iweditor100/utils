@@ -24,7 +24,7 @@ export const QuickServiceCheck: React.FC<QuickServiceCheckProps> = ({ isLoaded, 
     const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
     const placesService = useRef<google.maps.places.PlacesService | null>(null);
     const sessionToken = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
-    const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -123,7 +123,7 @@ export const QuickServiceCheck: React.FC<QuickServiceCheckProps> = ({ isLoaded, 
     const isUnderService = result?.data?.isUnderService;
 
     return (
-        <div ref={containerRef} className="relative w-full max-w-2xl mx-auto">
+        <div ref={containerRef} className="relative w-full mx-auto">
             <div className="flex flex-col gap-2">
                 <div className="relative flex items-center group">
                     <div className="absolute left-4 z-10 text-gray-400 group-focus-within:text-blue-500 transition-colors">

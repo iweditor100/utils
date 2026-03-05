@@ -14,6 +14,11 @@ export const googleCalendarApi = createApi({
             }),
         }),
 
+        disconnectGoogle: builder.mutation<ApiSuccess<{}>, void>({
+            query: () => ({ url: "/google/disconnect", method: "POST"}),
+            invalidatesTags: ["GoogleStatus"]
+        }),
+
         getGoogleStatus: builder.query<ApiSuccess<{ connected: boolean; email?: string; isSyncEnabled?: boolean }>, void>({
             query: () => ({
                 url: "/google/status",
@@ -31,18 +36,20 @@ export const googleCalendarApi = createApi({
             invalidatesTags: ["GoogleStatus"],
         }),
 
-        importFromGoogle: builder.mutation<ApiSuccess<{}>, void>({
-            query: () => ({
+        importFromGoogle: builder.mutation<ApiSuccess<{}>, { startDate?: string; endDate?: string }>({
+            query: (body) => ({
                 url: "/google/import",
                 method: "POST",
+                data: body,
             }),
             invalidatesTags: ["GoogleCalendar"],
         }),
 
-        exportToGoogle: builder.mutation<ApiSuccess<{}>, void>({
-            query: () => ({
+        exportToGoogle: builder.mutation<ApiSuccess<{}>, { startDate?: string; endDate?: string }>({
+            query: (body) => ({
                 url: "/google/export",
                 method: "POST",
+                data: body,
             }),
             invalidatesTags: ["GoogleCalendar"],
         }),
@@ -51,6 +58,7 @@ export const googleCalendarApi = createApi({
 
 export const {
     useConnectGoogleMutation,
+    useDisconnectGoogleMutation,
     useGetGoogleStatusQuery,
     useToggleGoogleSyncMutation,
     useImportFromGoogleMutation,

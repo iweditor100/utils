@@ -13,6 +13,7 @@ router.post("/webhook", GoogleCalendarController.webhook);
 router.use(authenticateMiddleware);
 
 router.get("/connect", GoogleCalendarController.connect);
+router.post("/disconnect", GoogleCalendarController.disconnect); 
 router.post("/import", GoogleCalendarController.importEvents);
 router.post("/export", GoogleCalendarController.exportEvents);
 router.get("/status", GoogleCalendarController.status);

@@ -96,33 +96,33 @@ export class GoogleCalendarService {
         return client;
     }
 
-    static async getStatus(userId: string): Promise<{ connected: boolean; email?: string }> {
+    static async getStatus(userId: string): Promise<{ connected: boolean; email?: string; isSyncEnabled?: boolean }> {
         const integration = await prisma.googleCalendarIntegration.findUnique({
             where: { userId },
-            select: { email: true },
+            select: { email: true, isSyncEnabled: true },
         });
 
         if (!integration) {
             return { connected: false };
         }
 
-        return { connected: true, email: integration.email };
+        return { connected: true, email: integration.email, isSyncEnabled: integration.isSyncEnabled };
     }
 
-    static async importEvents(userId: string): Promise<void> {
+    static async importEvents(userId: string, startDate?: Date, endDate?: Date): Promise<void> {
         const client = await this.getAuthorizedClient(userId);
         const calendar = google.calendar({
             version: "v3",
             auth: client,
         });
 
-        // Fetch future events (1 month ago to 1 year ahead)
-        const timeMin = new Date();
-        timeMin.setMonth(timeMin.getMonth() - 1);
+        // Default: 1 month ago to now when no date range provided
+        const timeMin = startDate ?? (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d; })();
 
         const res = await calendar.events.list({
             calendarId: "primary",
             timeMin: timeMin.toISOString(),
+            ...(endDate && { timeMax: endDate.toISOString() }),
             singleEvents: true,
             orderBy: "startTime",
         });
@@ -177,19 +177,20 @@ export class GoogleCalendarService {
         }
     }
 
-    static async exportEvents(userId: string): Promise<void> {
+    static async exportEvents(userId: string, startDate?: Date, endDate?: Date): Promise<void> {
         const client = await this.getAuthorizedClient(userId);
         const calendar = google.calendar({
             version: "v3",
             auth: client,
         });
 
-
-        // Find local events that are NOT yet synced
+        // Find local events that are NOT yet synced, optionally filtered by date range
         const localEvents = await prisma.calendarEvent.findMany({
             where: {
                 userId,
                 googleEventId: null,
+                ...(startDate && { startAt: { gte: startDate } }),
+                ...(endDate && { endAt: { lte: endDate } }),
             },
         });
 
@@ -230,5 +231,33 @@ export class GoogleCalendarService {
                 // Continue to next event
             }
         }
+    }
+
+
+    static async disconnect(userId: string): Promise<void> {
+        const integration = await prisma.googleCalendarIntegration.findUnique({ where: { userId }});
+        if (!integration) return; //no integration found. 
+
+        // stop webhook channel first, this is using a valid token. 
+        if (integration.isSyncEnabled || integration.webhookChannelId) {
+            const { GoogleCalendarSyncService } = await import("./googleCalendar.sync.service");
+            await GoogleCalendarSyncService.stopWatchChannel(userId);
+        }
+
+
+
+        // revoke the token on Google's side. 
+        if (integration.accessToken) {
+            try {
+                const client = this.createOAuthClient();
+                await client.revokeToken(integration.accessToken);
+            } catch (err) {
+                console.warn("Failed to revoke Google token (may be already expired): ", err);
+            }
+        }
+
+
+        // delete the integration record.
+        await prisma.googleCalendarIntegration.delete({ where: { userId }});
     }
 }

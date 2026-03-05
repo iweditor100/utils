@@ -16,6 +16,7 @@ import Home from "../pages/Dashboard/Home";
 
 // Other Pages
 import UserProfiles from "../pages/UserProfiles";
+import Settings from "../pages/Settings";
 import Calendar from "../pages/Calendar";
 import { ServiceAreasPage } from "../features/serviceAreas/pages/ServiceAreasPage";
 import Blank from "../pages/Blank";
@@ -60,6 +61,7 @@ export const AppRoutes = () => {
             >
                 <Route path="/" element={<Home />} />
                 <Route path="/profile" element={<UserProfiles />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="/calendar" element={<Calendar />} />
                 <Route path="/service-areas" element={<ServiceAreasPage />} />
                 <Route path="/blank" element={<Blank />} />

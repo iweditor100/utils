@@ -1,4 +1,3 @@
-import { title } from "process";
 import { getPrisma } from "../../prisma/client";
 import { CalendarEventCreateData } from "./calendar.types";
 
@@ -27,12 +26,20 @@ export class CalendarService {
             },
         });
 
-        // Sync to Google
+
+        console.log("created event: ", event);
+
+
+        // Sync to Google if enabled (fires socket itself when done)
+        console.log("checking if google sync is enabled");
         const { GoogleCalendarSyncService } = await import("../google/googleCalendar.sync.service");
-        // Fire and forget - do not await to keep UI snappy, or await if strict consistency needed.
-        // Requirement says "immediate", usually implies async task but we can await for safety.
-        // Implementation guidelines say "await GoogleCalendarSyncService.pushLocalEvent(event.id)"
         await GoogleCalendarSyncService.pushLocalEvent(event.id);
+
+        console.log("checked if google sync is enabled");
+
+        // Always emit so the UI updates even when Google sync is off
+        const { getIO } = await import("../../infra/socket/socket");
+        getIO().to(`user:${userId}`).emit("calendar:updated");
 
         return event;
     }
@@ -63,9 +70,18 @@ export class CalendarService {
         const { GoogleCalendarSyncService } = await import("../google/googleCalendar.sync.service");
         await GoogleCalendarSyncService.pushLocalEvent(updated.id);
 
+        // Always emit so the UI updates even when Google sync is off
+        const { getIO } = await import("../../infra/socket/socket");
+        getIO().to(`user:${userId}`).emit("calendar:updated");
+
         return updated;
     }
 
+
+    static async deleteAllEvents(userId: string) {
+        const result = await prisma.calendarEvent.deleteMany({ where: { userId } });
+        return result.count;
+    }
 
     static async deleteEvent(userId: string, eventId: string) {
         const existing = await prisma.calendarEvent.findFirst({
@@ -79,8 +95,14 @@ export class CalendarService {
             await GoogleCalendarSyncService.deleteLocalEventFromGoogle(existing.id, userId, existing.googleEventId);
         }
 
-        return prisma.calendarEvent.delete({
+        const deleted = await prisma.calendarEvent.delete({
             where: { id: eventId }
-        })
+        });
+
+        // Always emit after DB delete so frontend refetch sees the event already gone
+        const { getIO } = await import("../../infra/socket/socket");
+        getIO().to(`user:${userId}`).emit("calendar:updated");
+
+        return deleted;
     }
 }

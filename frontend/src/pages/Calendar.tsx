@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { socket } from "../lib/socket";
 import FullCalendar from "@fullcalendar/react";
@@ -14,8 +14,20 @@ import {
   useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,
+  useDeleteAllEventsMutation,
 } from "../features/users/calendarApi";
-import { useConnectGoogleMutation, useGetGoogleStatusQuery, useToggleGoogleSyncMutation } from "../features/google/googleCalendarApi";
+import { useConnectGoogleMutation, useDisconnectGoogleMutation, useGetGoogleStatusQuery, useToggleGoogleSyncMutation, useImportFromGoogleMutation, useExportToGoogleMutation } from "../features/google/googleCalendarApi";
+import { useGetAvailabilityQuery, useUpdateScheduleMutation, useAddOffDayMutation, useRemoveOffDayMutation } from "../features/users/availabilityApi";
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+type DaySlot = { enabled: boolean; startTime: string; endTime: string };
+type WeekSchedule = Record<number, DaySlot>;
+
+const defaultWeekSchedule = (): WeekSchedule =>
+    Object.fromEntries(
+        Array.from({ length: 7 }, (_, i) => [i, { enabled: false, startTime: "09:00", endTime: "17:00" }])
+    ) as WeekSchedule;
 
 // Helper to format date for datetime-local input (YYYY-MM-DDTHH:mm)
 const formatDateTimeLocal = (dateStr: string | Date) => {
@@ -33,6 +45,7 @@ const Calendar: React.FC = () => {
   const [createEvent, { isLoading: isCreating }] = useCreateEventMutation();
   const [updateEvent, { isLoading: isUpdating }] = useUpdateEventMutation();
   const [deleteEvent, { isLoading: isDeleting }] = useDeleteEventMutation();
+  const [deleteAllEvents, { isLoading: isDeletingAll }] = useDeleteAllEventsMutation();
 
   // Socket.IO
   const user = useSelector((state: any) => state.auth.user);
@@ -72,6 +85,66 @@ const Calendar: React.FC = () => {
   const [connectGoogle] = useConnectGoogleMutation();
   const { data: googleStatus, refetch: refetchGoogleStatus } = useGetGoogleStatusQuery();
   const [toggleSync, { isLoading: isToggling }] = useToggleGoogleSyncMutation();
+  const [importFromGoogle, { isLoading: isImporting }] = useImportFromGoogleMutation();
+  const [exportToGoogle, { isLoading: isExporting }] = useExportToGoogleMutation();
+  const [disconnectGoogle, { isLoading: isDisconnecting }] = useDisconnectGoogleMutation();
+
+  // import/export date range state
+  const [importStart, setImportStart] = useState("");
+  const [importEnd, setImportEnd] = useState("");
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
+
+  // Availability
+  const { data: availabilityData } = useGetAvailabilityQuery();
+  const [updateSchedule, { isLoading: isSavingSchedule }] = useUpdateScheduleMutation();
+  const [addOffDay, { isLoading: isAddingOffDay }] = useAddOffDayMutation();
+  const [removeOffDay] = useRemoveOffDayMutation();
+  const [showAvailability, setShowAvailability] = useState(false);
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(defaultWeekSchedule());
+  const [offDayDate, setOffDayDate] = useState("");
+  const [offDayReason, setOffDayReason] = useState("");
+
+  // Sync server availability into local schedule state
+  useEffect(() => {
+    if (!availabilityData?.data) return;
+    const next = defaultWeekSchedule();
+    for (const slot of availabilityData.data.slots) {
+      next[slot.dayOfWeek] = { enabled: true, startTime: slot.startTime, endTime: slot.endTime };
+    }
+    setWeekSchedule(next);
+  }, [availabilityData]);
+
+  const handleSaveSchedule = useCallback(async () => {
+    const slots = Object.entries(weekSchedule)
+      .filter(([, v]) => v.enabled)
+      .map(([day, v]) => ({ dayOfWeek: Number(day), startTime: v.startTime, endTime: v.endTime }));
+    try {
+      await updateSchedule(slots).unwrap();
+    } catch (err) {
+      console.error("Failed to save schedule", err);
+    }
+  }, [weekSchedule, updateSchedule]);
+
+  const handleAddOffDay = useCallback(async () => {
+    if (!offDayDate) return;
+    try {
+      await addOffDay({ date: offDayDate, reason: offDayReason || undefined }).unwrap();
+      setOffDayDate("");
+      setOffDayReason("");
+    } catch (err) {
+      console.error("Failed to add off day", err);
+    }
+  }, [offDayDate, offDayReason, addOffDay]);
+
+  const handleRemoveOffDay = useCallback(async (date: string) => {
+    const dateOnly = date.split("T")[0];
+    try {
+      await removeOffDay(dateOnly).unwrap();
+    } catch (err) {
+      console.error("Failed to remove off day", err);
+    }
+  }, [removeOffDay]);
 
 
   const handleConnectGoogle = async () => {
@@ -83,12 +156,56 @@ const Calendar: React.FC = () => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm("Delete all local calendar events? This cannot be undone.")) return;
+    try {
+      await deleteAllEvents().unwrap();
+      refetch();
+    } catch (err) {
+      console.error("Failed to delete all events", err);
+    }
+  };
+
   const handleToggleSync = async (enabled: boolean) => {
     try {
       await toggleSync({ enabled }).unwrap();
       refetchGoogleStatus();
-    } catch (err) {
+    } catch (err: any) {
+      const appCode = err?.data?.appCode ?? err?.appCode;
+      if (appCode === 42005) {
+        // Token lacks calendar scope — must reconnect to grant it
+        if (confirm("Your Google token doesn't have Calendar permissions. Reconnect now?")) {
+          handleConnectGoogle();
+        }
+        return;
+      }
       console.error("Failed to toggle sync", err);
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      await importFromGoogle({ startDate: importStart || undefined, endDate: importEnd || undefined }).unwrap();
+      refetch();
+    } catch (err) {
+      console.error("Failed to import from Google", err);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      await exportToGoogle({ startDate: exportStart || undefined, endDate: exportEnd || undefined }).unwrap();
+    } catch (err) {
+      console.error("Failed to export to Google", err);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!confirm("Disconnect Google Calendar? This will unlink all synced events.")) return;
+    try {
+      await disconnectGoogle().unwrap();
+    } catch (err) {
+      console.error("Failed to disconnect Google", err);
     }
   };
 
@@ -100,14 +217,32 @@ const Calendar: React.FC = () => {
   const calendarEvents = eventsData?.data?.events.map((event) => ({
     id: event.id,
     title: event.title,
-    start: event.startAt, // FullCalendar parses ISO UTC automatically
+    start: event.startAt,
     end: event.endAt,
-    extendedProps: {
-      category: event.category
-    },
-    // Map calendar type to class name for styling if needed, or rely on renderEventContent
-    classNames: [`event-${event.category.toLowerCase()}`]
+    extendedProps: { category: event.category },
+    classNames: [`event-${event.category.toLowerCase()}`],
   })) || [];
+
+  // Availability background events
+  const availabilityBgEvents = availabilityData?.data
+    ? [
+        ...availabilityData.data.slots.map((slot) => ({
+          display: "background" as const,
+          daysOfWeek: [slot.dayOfWeek],
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          color: "rgba(34, 197, 94, 0.15)",
+        })),
+        ...availabilityData.data.offDays.map((od) => ({
+          display: "background" as const,
+          start: od.date.split("T")[0],
+          allDay: true,
+          color: "rgba(239, 68, 68, 0.18)",
+        })),
+      ]
+    : [];
+
+  const allCalendarEvents = [...calendarEvents, ...availabilityBgEvents];
 
   const handleDateSelect = (selectInfo: DateSelectArg) => {
     // Reset form
@@ -147,14 +282,16 @@ const Calendar: React.FC = () => {
 
     try {
       if (selectedEventId) {
+        console.log("selected an event: ", selectedEventId, "with payload: ", payload);
         await updateEvent({ id: selectedEventId, body: payload }).unwrap();
       } else {
+        console.log("creating an event with payload: ", payload);
         await createEvent(payload).unwrap();
       }
+      refetch();
       closeModal();
     } catch (error) {
       console.error("Failed to save event", error);
-      // Ideally show toast notification here
     }
   };
 
@@ -163,6 +300,7 @@ const Calendar: React.FC = () => {
     if (confirm("Are you sure you want to delete this event?")) {
       try {
         await deleteEvent(selectedEventId).unwrap();
+        refetch();
         closeModal();
       } catch (error) {
         console.error("Failed to delete event", error);
@@ -184,7 +322,7 @@ const Calendar: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Google Calendar</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {googleStatus?.data?.connected
-                  ? `Connected as ${googleStatus.data.email}`
+                  ? `Connected as ${googleStatus.data.email} please make sure you are using ngrok`
                   : "Connect your Google Calendar to sync events."}
               </p>
             </div>
@@ -208,7 +346,7 @@ const Calendar: React.FC = () => {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                       </span>
-                      Real-time Sync Active
+                      IN SYNC
                     </span>
                   )}
 
@@ -231,10 +369,242 @@ const Calendar: React.FC = () => {
                       "Enable Sync"
                     )}
                   </button>
+                  <button
+                    onClick={handleDisconnectGoogle}
+                    disabled={isDisconnecting}
+                    className="px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 disabled:opacity-50"
+                  >
+                    {isDisconnecting ? "Disconnecting..." : "Disconnect Google"}
+                  </button>
                 </>
               )}
             </div>
           </div>
+
+          {/* AVAILABILITY SETTINGS */}
+          <div className="mb-4">
+            <button
+              onClick={() => setShowAvailability((p) => !p)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700/50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Availability Settings
+              <svg
+                className={`w-4 h-4 ml-1 transition-transform ${showAvailability ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showAvailability && (
+              <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50 space-y-6">
+                {/* Weekly Schedule */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Weekly Schedule</h4>
+                  <div className="space-y-2">
+                    {DAY_NAMES.map((name, day) => {
+                      const slot = weekSchedule[day];
+                      return (
+                        <div key={day} className="flex items-center gap-3 flex-wrap">
+                          <label className="flex items-center gap-2 w-16 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={slot.enabled}
+                              onChange={(e) =>
+                                setWeekSchedule((prev) => ({
+                                  ...prev,
+                                  [day]: { ...prev[day], enabled: e.target.checked },
+                                }))
+                              }
+                              className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{name}</span>
+                          </label>
+                          <input
+                            type="time"
+                            value={slot.startTime}
+                            disabled={!slot.enabled}
+                            onChange={(e) =>
+                              setWeekSchedule((prev) => ({
+                                ...prev,
+                                [day]: { ...prev[day], startTime: e.target.value },
+                              }))
+                            }
+                            className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                          />
+                          <span className="text-gray-400 text-sm">–</span>
+                          <input
+                            type="time"
+                            value={slot.endTime}
+                            disabled={!slot.enabled}
+                            onChange={(e) =>
+                              setWeekSchedule((prev) => ({
+                                ...prev,
+                                [day]: { ...prev[day], endTime: e.target.value },
+                              }))
+                            }
+                            className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={handleSaveSchedule}
+                    disabled={isSavingSchedule}
+                    className="mt-4 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {isSavingSchedule ? "Saving..." : "Save Schedule"}
+                  </button>
+                </div>
+
+                {/* Off Days */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Off Days</h4>
+                  <div className="flex items-center gap-2 flex-wrap mb-3">
+                    <input
+                      type="date"
+                      value={offDayDate}
+                      onChange={(e) => setOffDayDate(e.target.value)}
+                      className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Reason (optional)"
+                      value={offDayReason}
+                      onChange={(e) => setOffDayReason(e.target.value)}
+                      className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    />
+                    <button
+                      onClick={handleAddOffDay}
+                      disabled={!offDayDate || isAddingOffDay}
+                      className="h-8 px-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      {isAddingOffDay ? "Adding..." : "Add Off Day"}
+                    </button>
+                  </div>
+
+                  {availabilityData?.data?.offDays?.length ? (
+                    <ul className="space-y-1">
+                      {availabilityData.data.offDays.map((od) => (
+                        <li key={od.id} className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
+                          <span className="font-medium">{od.date.split("T")[0]}</span>
+                          {od.reason && <span className="text-gray-400">— {od.reason}</span>}
+                          <button
+                            onClick={() => handleRemoveOffDay(od.date)}
+                            className="ml-auto text-red-500 hover:text-red-700 text-xs font-medium"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-gray-400">No off days set.</p>
+                  )}
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-700">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-green-400/50"></span>
+                    Available hours
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-red-400/50"></span>
+                    Off day
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CLEAR ALL EVENTS */}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleDeleteAll}
+              disabled={isDeletingAll}
+              className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 dark:hover:bg-red-500/20"
+            >
+              {isDeletingAll ? "Clearing..." : "Clear All Events"}
+            </button>
+          </div>
+
+          {/* IMPORT / EXPORT PANEL — shown when connected but sync is OFF */}
+          {googleStatus?.data?.connected && !googleStatus.data.isSyncEnabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Import from Google */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Import from Google</h4>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="date"
+                    value={importStart}
+                    onChange={(e) => setImportStart(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    placeholder="Start date"
+                  />
+                  <input
+                    type="date"
+                    value={importEnd}
+                    min={importStart}
+                    onChange={(e) => setImportEnd(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    placeholder="End date"
+                  />
+                  <button
+                    onClick={handleImport}
+                    disabled={isImporting}
+                    className="mt-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isImporting ? (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : "Import"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Export to Google */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Export to Google</h4>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="date"
+                    value={exportStart}
+                    onChange={(e) => setExportStart(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    placeholder="Start date"
+                  />
+                  <input
+                    type="date"
+                    value={exportEnd}
+                    min={exportStart}
+                    onChange={(e) => setExportEnd(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    placeholder="End date"
+                  />
+                  <button
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className="mt-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isExporting ? (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : "Export"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="flex h-[600px] items-center justify-center">
@@ -250,7 +620,7 @@ const Calendar: React.FC = () => {
                 center: "title",
                 right: "dayGridMonth,timeGridWeek,timeGridDay",
               }}
-              events={calendarEvents}
+              events={allCalendarEvents}
               editable={true}
               selectable={true}
               selectMirror={true}

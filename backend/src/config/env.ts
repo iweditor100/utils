@@ -42,6 +42,9 @@ const envSchema = z.object({
 
   // Worker /enqueue URL. Backend only enqueues key; no image processing.
   IMAGE_QUEUE_INGESTION_URL: z.string().url().optional(),
+
+
+  GOOGLE_WEBHOOK_URL: z.string().url().optional(),
 });
 
 

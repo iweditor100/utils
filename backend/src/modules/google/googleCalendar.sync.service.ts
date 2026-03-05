@@ -4,6 +4,9 @@ import { GoogleCalendarService } from "./googleCalendar.service";
 import { v4 as uuidv4 } from "uuid";
 import { EventCategory, SyncSource } from "@prisma/client";
 import { getIO } from "../../infra/socket/socket";
+import { env } from "../../config/env";
+import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
+
 
 const prisma = getPrisma();
 
@@ -14,8 +17,13 @@ export class GoogleCalendarSyncService {
     // ==========================================
 
     static async pushLocalEvent(eventId: string): Promise<void> {
+
+
         const event = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
         if (!event) return;
+
+
+
 
         // LOOP PREVENTION: If the last modification came from Google, do not push back.
         if (event.lastModifiedSource === SyncSource.GOOGLE) {
@@ -26,7 +34,10 @@ export class GoogleCalendarSyncService {
             where: { userId: event.userId }
         });
 
-        if (!integration || !integration.isSyncEnabled) return;
+
+        if (!integration || !integration.isSyncEnabled) {
+            return;
+        }
 
         try {
             const client = await GoogleCalendarService.getAuthorizedClient(event.userId);
@@ -118,8 +129,6 @@ export class GoogleCalendarSyncService {
                 calendarId: 'primary',
                 eventId: googleEventId,
             });
-            const io = getIO();
-            io.to(`user:${userId}`).emit("calendar:updated");
 
 
         } catch (error: any) {
@@ -144,56 +153,9 @@ export class GoogleCalendarSyncService {
                 const res = await calendar.events.list({
                     calendarId: 'primary',
                     singleEvents: true,
+                    showDeleted: true,
                     pageToken,
                     orderBy: 'startTime',
-                    // Sync from now onwards for initial sync could be a choice, 
-                    // but usually users want some history. Let's default to standard list.
-                });
-
-                const events = res.data.items || [];
-
-                for (const googleEvent of events) {
-                    await this.upsertGoogleEventToLocal(userId, googleEvent);
-                }
-
-                pageToken = res.data.nextPageToken || undefined;
-
-                if (res.data.nextSyncToken) {
-                    await prisma.googleCalendarIntegration.update({
-                        where: { userId },
-                        data: { syncToken: res.data.nextSyncToken }
-                    });
-                }
-
-            } while (pageToken);
-
-        } catch (error) {
-            console.error("Full initial sync failed", error);
-        }
-    }
-
-    static async pullRemoteChanges(userId: string): Promise<void> {
-        const integration = await prisma.googleCalendarIntegration.findUnique({
-            where: { userId }
-        });
-
-        if (!integration || !integration.isSyncEnabled) return;
-
-        if (!integration.syncToken) {
-            return this.fullInitialSync(userId);
-        }
-
-        try {
-            const client = await GoogleCalendarService.getAuthorizedClient(userId);
-            const calendar = google.calendar({ version: 'v3', auth: client });
-
-            let pageToken: string | undefined;
-
-            do {
-                const res = await calendar.events.list({
-                    calendarId: 'primary',
-                    syncToken: integration.syncToken,
-                    pageToken,
                 });
 
                 const events = res.data.items || [];
@@ -220,6 +182,75 @@ export class GoogleCalendarSyncService {
                 }
 
             } while (pageToken);
+
+            // Emit once after full sync completes
+            const io = getIO();
+            io.to(`user:${userId}`).emit("calendar:updated");
+
+        } catch (error: any) {
+            console.error("Full initial sync failed", error);
+            throw error;
+        }
+    }
+
+    static async pullRemoteChanges(userId: string): Promise<void> {
+        const integration = await prisma.googleCalendarIntegration.findUnique({
+            where: { userId }
+        });
+
+        if (!integration || !integration.isSyncEnabled) return;
+
+        if (!integration.syncToken) {
+            return this.fullInitialSync(userId);
+        }
+
+        try {
+            const client = await GoogleCalendarService.getAuthorizedClient(userId);
+            const calendar = google.calendar({ version: 'v3', auth: client });
+
+            let pageToken: string | undefined;
+            let hasChanges = false;
+
+            do {
+                const res = await calendar.events.list({
+                    calendarId: 'primary',
+                    syncToken: integration.syncToken,
+                    showDeleted: true,
+                    pageToken,
+                });
+
+                const events = res.data.items || [];
+
+                for (const googleEvent of events) {
+                    if (googleEvent.status === 'cancelled') {
+                        if (googleEvent.id) {
+                            await prisma.calendarEvent.deleteMany({
+                                where: { googleEventId: googleEvent.id }
+                            });
+                            hasChanges = true;
+                        }
+                    } else {
+                        await this.upsertGoogleEventToLocal(userId, googleEvent);
+                        hasChanges = true;
+                    }
+                }
+
+                pageToken = res.data.nextPageToken || undefined;
+
+                if (res.data.nextSyncToken) {
+                    await prisma.googleCalendarIntegration.update({
+                        where: { userId },
+                        data: { syncToken: res.data.nextSyncToken }
+                    });
+                }
+
+            } while (pageToken);
+
+            // Emit once after processing all changes
+            if (hasChanges) {
+                const io = getIO();
+                io.to(`user:${userId}`).emit("calendar:updated");
+            }
 
         } catch (error: any) {
             if (error.code === 410) {
@@ -304,9 +335,6 @@ export class GoogleCalendarSyncService {
                 lastSyncedAt: new Date(),
             }
         });
-
-        const io = getIO();
-        io.to(`user:${userId}`).emit("calendar:updated");
     }
 
     // ==========================================
@@ -319,8 +347,23 @@ export class GoogleCalendarSyncService {
                 where: { userId },
                 data: { isSyncEnabled: true }
             });
-            await this.fullInitialSync(userId);
-            await this.createWatchChannel(userId);
+            try {
+                await this.fullInitialSync(userId);
+                await this.createWatchChannel(userId);
+            } catch (error: any) {
+                // Roll back — don't leave sync marked enabled if it failed
+                await prisma.googleCalendarIntegration.update({
+                    where: { userId },
+                    data: { isSyncEnabled: false }
+                });
+                const isInsufficientScopes =
+                    error?.status === 403 &&
+                    error?.cause?.status === 'PERMISSION_DENIED';
+                if (isInsufficientScopes) {
+                    throw { appCode: GOOGLE_CALENDAR_CODES.GOOGLE_INSUFFICIENT_SCOPES };
+                }
+                throw error;
+            }
         } else {
             await this.stopWatchChannel(userId);
             await prisma.googleCalendarIntegration.update({
@@ -335,7 +378,8 @@ export class GoogleCalendarSyncService {
         const calendar = google.calendar({ version: 'v3', auth: client });
 
         const channelId = uuidv4();
-        const webhookUrl = process.env.GOOGLE_WEBHOOK_URL;
+        const webhookUrl = env.GOOGLE_WEBHOOK_URL;
+
 
         if (!webhookUrl) {
             throw new Error("GOOGLE_WEBHOOK_URL is not defined");
@@ -351,6 +395,7 @@ export class GoogleCalendarSyncService {
                 token: userId,
             }
         });
+
 
         const resourceId = res.data.resourceId;
         const expiration = res.data.expiration ? BigInt(res.data.expiration) : undefined;

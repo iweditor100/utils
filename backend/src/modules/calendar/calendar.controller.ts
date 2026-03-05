@@ -63,6 +63,14 @@ export class CalendarController {
 
 
 
+    static async deleteAllEvents(req: Request, res: Response) {
+        const userId = req.user?.userId;
+        if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
+
+        const count = await CalendarService.deleteAllEvents(userId);
+        return sendSuccess(res, CALENDAR_CODES.EVENTS_CLEARED, { count }, HTTP_STATUS.OK);
+    }
+
     static async deleteEvent(req: Request, res: Response) {
         const userId = req.user?.userId;
         if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);

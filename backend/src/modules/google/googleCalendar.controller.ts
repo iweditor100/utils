@@ -22,6 +22,19 @@ export class GoogleCalendarController {
     }
 
 
+    static async disconnect(req: Request, res: Response) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED); //found no user id,
+
+            await GoogleCalendarService.disconnect(userId); //disconnect for this user. 
+            return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_DISCONNECTED, {}, HTTP_STATUS.OK);
+        } catch (error) {
+            return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR); //some internal error was caught. 
+        }
+    }
+
+
     static async callback(req: Request, res: Response) {
         try {
             const { code, state } = req.query;
@@ -68,7 +81,11 @@ export class GoogleCalendarController {
                 return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
             }
 
-            await GoogleCalendarService.importEvents(userId);
+            const { startDate, endDate } = req.body;
+            const start = startDate ? new Date(startDate) : undefined;
+            const end = endDate ? new Date(endDate) : undefined;
+
+            await GoogleCalendarService.importEvents(userId, start, end);
 
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_IMPORT_SUCCESS, {}, HTTP_STATUS.OK);
         } catch (error: any) {
@@ -86,7 +103,11 @@ export class GoogleCalendarController {
                 return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
             }
 
-            await GoogleCalendarService.exportEvents(userId);
+            const { startDate, endDate } = req.body;
+            const start = startDate ? new Date(startDate) : undefined;
+            const end = endDate ? new Date(endDate) : undefined;
+
+            await GoogleCalendarService.exportEvents(userId, start, end);
 
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_EXPORT_SUCCESS, {}, HTTP_STATUS.OK);
         } catch (error: any) {
@@ -116,18 +137,24 @@ export class GoogleCalendarController {
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_SYNC_COMPLETED, { enabled }, HTTP_STATUS.OK);
         } catch (error: any) {
             console.error("Toggle sync error", error);
+            if (error.appCode === GOOGLE_CALENDAR_CODES.GOOGLE_INSUFFICIENT_SCOPES) {
+                return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INSUFFICIENT_SCOPES, HTTP_STATUS.BAD_REQUEST);
+            }
             return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_SYNC_FAILED, HTTP_STATUS.INTERNAL_SERVER_ERROR, error.message);
         }
     }
 
     static async webhook(req: Request, res: Response) {
         // Google requires immediate 200 OK
-        console.log("Webhook triggered");
         res.status(200).send("OK");
 
         try {
             const channelId = req.headers['x-goog-channel-id'] as string;
             const resourceId = req.headers['x-goog-resource-id'] as string;
+            const resourceState = req.headers['x-goog-resource-state'] as string;
+
+            // Skip the initial sync confirmation notification
+            if (resourceState === 'sync') return;
 
             if (!channelId || !resourceId) return;
 
@@ -143,7 +170,7 @@ export class GoogleCalendarController {
             });
 
             if (!integration) {
-                // Channel not found or mismatched
+                console.log(`[Webhook] No integration found for channelId=${channelId}`);
                 return;
             }
 
