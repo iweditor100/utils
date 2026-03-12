@@ -13,7 +13,7 @@
   - [Backend Features](#backend-features)
   - [Frontend Features](#frontend-features)
   - [Notes](#notes)
-  - [Future Improvements](#future-improvements)
+  - [Future](#what-is-yet-to-come)
 
   ---
 
@@ -588,20 +588,44 @@ An ImageWorker that is listening to the imageQueue consumes it and performs the 
   ## Environment Variables
 
   ### Backend
+| Variable | Description |
+|---|---|
+| `NODE_ENV` | Defines the environment the application is running in (development, production, test). |
+| `PORT` | Port on which the backend server runs locally. |
+| `DATABASE_URL` | Connection string used by Prisma to connect to the PostgreSQL database. |
+| `FRONTEND_ORIGIN` | Allowed frontend origin for CORS so the frontend can make requests to the backend. |
+| `ACCESS_TOKEN_SECRET` | Secret used to sign and verify JWT access tokens. |
+| `REFRESH_TOKEN_SECRET` | Secret used to sign and verify JWT refresh tokens. |
+| `SMTP_HOST` | SMTP server host used for sending emails (verification, password reset, etc.). |
+| `SMTP_PORT` | Port used by the SMTP server. |
+| `SMTP_USER` | Username used to authenticate with the SMTP server. |
+| `SMTP_PASS` | Password used to authenticate with the SMTP server. |
+| `SMTP_FROM` | Default email address used as the sender for outgoing emails. |
+| `REDIS_HOST` | Host address of the Redis server used for caching and BullMQ queues. |
+| `REDIS_PORT` | Port used to connect to the Redis server. |
+| `R2_ACCOUNT_ID` | Cloudflare R2 account identifier used to access the R2 storage service. |
+| `R2_ACCESS_KEY` | Access key used to authenticate with the R2 S3-compatible API. |
+| `R2_SECRET_ACCESS_KEY` | Secret key used along with the access key to authenticate with R2. |
+| `R2_BUCKET` | Name of the R2 bucket where uploaded files are stored. |
+| `R2_PUBLIC_BASE_URL` | Public base URL used to access objects stored in the R2 bucket. |
+| `TOKEN_VALUE` | Secret token used to authenticate internal ingestion requests (for example image queue ingestion endpoint). |
+| `IMAGE_QUEUE_INGESTION_URL` | Endpoint used to push uploaded image keys into the image processing queue. |
+| `GOOGLE_CLIENT_ID` | OAuth client ID used for Google authentication and Google Calendar integration. |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret used for Google authentication. |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | Redirect URI used during Google OAuth flow for Google Calendar authorization. |
+| `GOOGLE_WEBHOOK_URL` | Webhook endpoint used by Google to send calendar event updates. |
+| `GOOGLE_MAPS_API` | API key used for accessing Google Maps services (maps, geocoding, etc.). |
 
-  | Variable | Description |
-  |---|---|
-  | `<add details>` | <write description here> |
-  | `<add details>` | <write description here> |
-  | `<add details>` | <write description here> |
-  | `<add details>` | <write description here> |
 
   ### Frontend
 
   | Variable | Description |
   |---|---|
-  | `<add details>` | <write description here> |
-  | `<add details>` | <write description here> |
+  | `VITE_API_URL` | <write description here> |
+  | `VITE_GOOGLE_CLIENT_ID` | <write description here> |
+  | `VITE_NODE_ENV` | <write description here> |
+  | `VITE_R2_PUBLIC_BASE_URL` | <write description here> |
+  | `VITE_GOOGLE_MAPS_API_KEY` | <write description here> |
 
   ---
 
@@ -632,6 +656,4 @@ An ImageWorker that is listening to the imageQueue consumes it and performs the 
   ## What Is Yet to come?
 
   - Jobs
-  - COULD BE MORE. 
-  - <add details>
-  - <add details>
+  - COULD BE MORE
