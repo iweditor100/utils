@@ -3,6 +3,8 @@ import { OAuth2Client } from "google-auth-library";
 import { getPrisma } from "../../prisma/client";
 import { EventCategory } from "@prisma/client";
 import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
+import { redis } from "../../infra/redis";
+import crypto from "crypto";
 
 const prisma = getPrisma();
 
@@ -15,16 +17,19 @@ export class GoogleCalendarService {
         );
     }
 
-    static generateAuthUrl(userId: string): string {
+    static async generateAuthUrl(userId: string): Promise<string> {
         const client = this.createOAuthClient();
+        const nonce = crypto.randomUUID();
+        // Store nonce → userId in Redis, expires in 10 minutes
+        await redis.setex(`oauth:state:${nonce}`, 600, userId);
         return client.generateAuthUrl({
             access_type: "offline",
-            prompt: "consent", // Force refresh token
+            prompt: "consent",
             scope: [
                 "https://www.googleapis.com/auth/calendar",
                 "https://www.googleapis.com/auth/userinfo.email",
             ],
-            state: userId,
+            state: nonce,
         });
     }
 

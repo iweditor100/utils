@@ -24,17 +24,17 @@ export async function presignAvatarUpload(
     const key = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
 
     const command = new PutObjectCommand({
-        Bucket: env.R2_BUCKET_NAME,
+        Bucket: env.R2_BUCKET,
         Key: key,
         ContentType: contentType,
     });
 
     const uploadUrl = await getSignedUrl(r2Client, command, {
-        expiresIn: 30000,
+        expiresIn: env.R2_PRESIGN_EXPIRES_IN_SECONDS,
     });
 
     return {
         uploadUrl,
-        publicUrl: `${env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`,
+        publicUrl: `${env.R2_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`,
     };
 }

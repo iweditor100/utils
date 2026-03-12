@@ -19,6 +19,7 @@ import UserProfiles from "../pages/UserProfiles";
 import Settings from "../pages/Settings";
 import Calendar from "../pages/Calendar";
 import { ServiceAreasPage } from "../features/serviceAreas/pages/ServiceAreasPage";
+import AvailabilityPage from "../pages/Availability";
 import Blank from "../pages/Blank";
 import FormElements from "../pages/Forms/FormElements";
 import BasicTables from "../pages/Tables/BasicTables";
@@ -32,6 +33,7 @@ import LineChart from "../pages/Charts/LineChart";
 import BarChart from "../pages/Charts/BarChart";
 import NotFound from "../pages/OtherPage/NotFound";
 import CalendarReplica from "../experimental/calendar-replica/CalendarReplica";
+import { UploadTester } from "../features/uploads/components/UploadTester";
 
 export const AppRoutes = () => {
     return (
@@ -64,6 +66,7 @@ export const AppRoutes = () => {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/calendar" element={<Calendar />} />
                 <Route path="/service-areas" element={<ServiceAreasPage />} />
+                <Route path="/check-availability" element={<AvailabilityPage />} />
                 <Route path="/blank" element={<Blank />} />
                 <Route path="/form-elements" element={<FormElements />} />
                 <Route path="/basic-tables" element={<BasicTables />} />
@@ -75,9 +78,10 @@ export const AppRoutes = () => {
                 <Route path="/videos" element={<Videos />} />
                 <Route path="/line-chart" element={<LineChart />} />
                 <Route path="/bar-chart" element={<BarChart />} />
+                <Route path="/upload-test" element={<UploadTester />} />
             </Route>
 
-            <Route path="/ui-test/calendar-replica" element={<CalendarReplica/>}/>
+            <Route path="/ui-test/calendar-replica" element={<CalendarReplica />} />
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />

@@ -10,32 +10,34 @@ interface ServiceAreaDraftOverlayProps {
     onCircleUpdate?: (updates: Partial<CircleDraft>) => void;
 }
 
+// Defined outside component so references are stable — prevents Circle/Polygon
+// from calling setOptions on every render, which was overriding setCenter
+const circleOptions = {
+    fillColor: "#3b82f6",
+    fillOpacity: 0.2,
+    strokeColor: "#3b82f6",
+    strokeWeight: 2,
+    clickable: false,
+    editable: false,
+    zIndex: 10,
+};
+
+const polygonOptions = {
+    fillColor: "#3b82f6",
+    fillOpacity: 0.2,
+    strokeColor: "#3b82f6",
+    strokeWeight: 2,
+    clickable: false,
+    editable: false,
+    zIndex: 10,
+};
+
 export const ServiceAreaDraftOverlay: React.FC<ServiceAreaDraftOverlayProps> = ({
     mode,
     draftCircle,
     draftPolygon,
     onCircleUpdate,
 }) => {
-    // Shared styling
-    const circleOptions = {
-        fillColor: "#3b82f6",
-        fillOpacity: 0.2,
-        strokeColor: "#3b82f6",
-        strokeWeight: 2,
-        clickable: false,
-        editable: false,
-        zIndex: 10,
-    };
-
-    const polygonOptions = {
-        fillColor: "#3b82f6",
-        fillOpacity: 0.2,
-        strokeColor: "#3b82f6",
-        strokeWeight: 2,
-        clickable: false,
-        editable: false,
-        zIndex: 10,
-    };
 
     if (mode === "search-circle" || mode === "drop-pin") {
         if (!draftCircle) return null;
@@ -50,11 +52,13 @@ export const ServiceAreaDraftOverlay: React.FC<ServiceAreaDraftOverlayProps> = (
                             onCircleUpdate?.({ lat: e.latLng.lat(), lng: e.latLng.lng() });
                         }
                     }}
+                    onUnmount={(marker) => marker.setMap(null)}
                 />
                 <Circle
                     center={{ lat: draftCircle.lat, lng: draftCircle.lng }}
                     radius={draftCircle.radius}
                     options={circleOptions}
+                    onUnmount={(circle) => circle.setMap(null)}
                 />
             </>
         );

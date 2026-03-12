@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(find C:/work/yogarth/projects/iwutils/cursor/workers -type f -name \"*.ts\" ! -path \"*/node_modules/*\" 2>/dev/null | head -20)",
+      "Bash(find /c/work/yogarth/projects/iwutils/cursor -type f -name \"*availability*\" -o -name \"*Availability*\" 2>/dev/null | head -20)",
+      "Bash(find /c/work/yogarth/projects/iwutils/cursor/frontend/src/hooks -type f | xargs grep -l \"availability\\\\|Availability\" 2>/dev/null)",
+      "Bash(find /c/work/yogarth/projects/iwutils/cursor/frontend/src -type f -name \"*.tsx\" -o -name \"*.ts\" | xargs grep -l \"AvailabilitySettings\\\\|useMultipartUpload\\\\|useUploadWithProgress\" 2>/dev/null)"
+    ]
+  }
+}

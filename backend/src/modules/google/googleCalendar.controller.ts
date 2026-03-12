@@ -3,6 +3,7 @@ import { GoogleCalendarService } from "./googleCalendar.service";
 import { sendError, sendSuccess } from "../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../constants";
 import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
+import { redis } from "../../infra/redis";
 
 
 export class GoogleCalendarController {
@@ -14,7 +15,7 @@ export class GoogleCalendarController {
                 return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
             }
 
-            const url = GoogleCalendarService.generateAuthUrl(userId);
+            const url = await GoogleCalendarService.generateAuthUrl(userId);
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_AUTH_URL_GENERATED, { url }, HTTP_STATUS.OK);
         } catch (error) {
             return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
@@ -36,26 +37,25 @@ export class GoogleCalendarController {
 
 
     static async callback(req: Request, res: Response) {
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4001";
         try {
             const { code, state } = req.query;
 
             if (!code || !state) {
-                return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INVALID_CALLBACK, HTTP_STATUS.BAD_REQUEST);
+                return res.redirect(`${frontendUrl}/calendar?google=error`);
             }
 
-            // state is passed as userId in generateAuthUrl
-            const userId = state as string;
+            // Resolve nonce → userId from Redis (prevents state forgery)
+            const userId = await redis.get(`oauth:state:${state as string}`);
+            if (!userId) {
+                return res.redirect(`${frontendUrl}/calendar?google=error`);
+            }
+            await redis.del(`oauth:state:${state as string}`);
 
             await GoogleCalendarService.handleCallback(code as string, userId);
-
-            // Redirect to frontend on success
-            // In production this should come from env but for now we assume localhost or configured URL
-            const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4001";
             return res.redirect(`${frontendUrl}/calendar?google=connected`);
 
         } catch (error) {
-            console.error("Google Callback Error:", error);
-            const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4001";
             return res.redirect(`${frontendUrl}/calendar?google=error`);
         }
     }
@@ -121,13 +121,11 @@ export class GoogleCalendarController {
         try {
             const userId = req.user?.userId;
             if (!userId) {
-                console.log("Not found the user")
                 return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
             }
 
             const { enabled } = req.body;
             if (typeof enabled !== 'boolean') {
-                console.log("Not found the enabled")
                 return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INVALID_CALLBACK, HTTP_STATUS.BAD_REQUEST);
             }
 
@@ -136,7 +134,6 @@ export class GoogleCalendarController {
 
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_SYNC_COMPLETED, { enabled }, HTTP_STATUS.OK);
         } catch (error: any) {
-            console.error("Toggle sync error", error);
             if (error.appCode === GOOGLE_CALENDAR_CODES.GOOGLE_INSUFFICIENT_SCOPES) {
                 return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INSUFFICIENT_SCOPES, HTTP_STATUS.BAD_REQUEST);
             }
@@ -152,14 +149,11 @@ export class GoogleCalendarController {
             const channelId = req.headers['x-goog-channel-id'] as string;
             const resourceId = req.headers['x-goog-resource-id'] as string;
             const resourceState = req.headers['x-goog-resource-state'] as string;
+            const channelToken = req.headers['x-goog-channel-token'] as string;
 
-            // Skip the initial sync confirmation notification
             if (resourceState === 'sync') return;
-
             if (!channelId || !resourceId) return;
 
-            // Verify token if we needed security, but x-goog-channel-id is unique enough for now if we look it up.
-            // We need to find WHICH user this belongs to.
             const prisma = await import("../../prisma/client").then(m => m.getPrisma());
 
             const integration = await prisma.googleCalendarIntegration.findFirst({
@@ -169,16 +163,16 @@ export class GoogleCalendarController {
                 }
             });
 
-            if (!integration) {
-                console.log(`[Webhook] No integration found for channelId=${channelId}`);
-                return;
-            }
+            if (!integration) return;
+
+            // Verify the token Google echoes back matches the userId we set on watch creation
+            if (channelToken !== integration.userId) return;
 
             const { GoogleCalendarSyncService } = await import("./googleCalendar.sync.service");
             await GoogleCalendarSyncService.pullRemoteChanges(integration.userId);
 
         } catch (error) {
-            console.error("Webhook processing error", error);
+            // intentionally silent — webhook errors must not affect Google retry logic
         }
     }
 }

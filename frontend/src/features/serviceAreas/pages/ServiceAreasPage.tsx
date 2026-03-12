@@ -87,7 +87,7 @@ export const ServiceAreasPage: React.FC = () => {
             updateCircle({
                 lat: e.latLng.lat(),
                 lng: e.latLng.lng(),
-                radius: 1000,
+                // no radius here — preserves whatever the user set with the slider
             });
         }
     }, [mode, updateCircle]);

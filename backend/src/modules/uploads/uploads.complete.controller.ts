@@ -18,6 +18,7 @@ const completeSchema = z.object({
 
 export async function completeUploadController(req: Request, res: Response) {
     try {
+        console.log("[COMPLETE] Received request:", req.body);
         const userId = req.user?.userId
 
         const parsed = completeSchema.safeParse(req.body);
@@ -31,28 +32,33 @@ export async function completeUploadController(req: Request, res: Response) {
 
         const { key, category } = parsed.data;
 
-        if (category !== "avatar") {
-            return sendSuccess(res, COMPLETE_UPLOAD_CODE, {}, HTTP_STATUS.OK);
-        }
+        // if (category !== "avatar") {
+        //     return sendSuccess(res, COMPLETE_UPLOAD_CODE, {}, HTTP_STATUS.OK);
+        // }
 
 
-        await imageQueue.add(
-            "generate-avatar-thumbnails",
-            {
-                key,
-                userId,
-            },
-            {
-                attempts: 3,
-                backoff: {
-                    type: "exponential",
-                    delay: 2000,
+        try {
+            console.log("Adding to imageQueue");
+            await imageQueue.add(
+                "generate-avatar-thumbnails",
+                {
+                    key,
+                    userId,
                 },
-                removeOnComplete: true,
-                removeOnFail: false,
-
-            }
-        );
+                {
+                    attempts: 3,
+                    backoff: {
+                        type: "exponential",
+                        delay: 2000,
+                    },
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                }
+            );
+        } catch (queueError) {
+            console.error("[COMPLETE] Failed to add to imageQueue (Redis might be down):", queueError);
+            // We still return success because the file is already in R2/S3
+        }
         return sendSuccess(res, COMPLETE_UPLOAD_CODE, {}, HTTP_STATUS.OK);
     } catch (error) {
         return sendError(

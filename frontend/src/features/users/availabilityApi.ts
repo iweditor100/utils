@@ -20,6 +20,14 @@ export type AvailabilityData = {
     offDays: OffDay[];
 };
 
+export type DaySlots = {
+    date: string;
+    dayOfWeek: number;
+    isOffDay: boolean;
+    offDayReason: string | null;
+    slots: AvailabilitySlot[];
+};
+
 export type SlotInput = {
     dayOfWeek: number;
     startTime: string;
@@ -58,6 +66,10 @@ export const availabilityApi = createApi({
             }),
             invalidatesTags: ["Availability"],
         }),
+        getSlotsForDate: builder.query<ApiSuccess<DaySlots>, string>({
+            query: (date) => ({ url: `/events/availability/slots?date=${date}`, method: "GET" }),
+            providesTags: ["Availability"],
+        }),
     }),
 });
 
@@ -66,4 +78,5 @@ export const {
     useUpdateScheduleMutation,
     useAddOffDayMutation,
     useRemoveOffDayMutation,
+    useGetSlotsForDateQuery,
 } = availabilityApi;

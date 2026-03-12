@@ -46,6 +46,29 @@ export class AvailabilityService {
         });
     }
 
+    static async getSlotsForDate(userId: string, dateStr: string) {
+        const date = new Date(dateStr + "T00:00:00.000Z");
+        const dayOfWeek = date.getUTCDay(); // 0=Sunday, 6=Saturday
+
+        const [slots, offDay] = await Promise.all([
+            prisma.userAvailability.findMany({
+                where: { userId, dayOfWeek },
+                orderBy: { startTime: "asc" },
+            }),
+            prisma.userOffDay.findFirst({
+                where: { userId, date },
+            }),
+        ]);
+
+        return {
+            date: dateStr,
+            dayOfWeek,
+            isOffDay: !!offDay,
+            offDayReason: offDay?.reason ?? null,
+            slots: offDay ? [] : slots,
+        };
+    }
+
     static async removeOffDay(userId: string, date: string) {
         const d = new Date(date);
         const existing = await prisma.userOffDay.findFirst({

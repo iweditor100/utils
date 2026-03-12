@@ -7,14 +7,18 @@ import { STORAGE_CONFIG } from "./storage.config";
 export async function presignPutObject(params: {
   key: string;
   contentType: string;
+  fileSize: number;
 }) {
   const command = new PutObjectCommand({
     Bucket: STORAGE_CONFIG.bucket,
     Key: params.key,
+    ContentType: params.contentType,
+    ContentLength: params.fileSize,
   });
   const uploadUrl = await getSignedUrl(r2Client, command, {
     expiresIn: STORAGE_CONFIG.presignExpiresInSeconds,
   });
+
   return { uploadUrl };
 }
 

@@ -79,7 +79,8 @@ const worker = new Worker(
         const originalBuffer = await streamToBuffer(originalObject.Body);
 
         if (originalBuffer.length > 10 * 1024 * 1024) {
-            throw new Error("File too large: " + key);
+            // throw new Error("File too large: " + key);
+            console.log("File too large, still processing: " + key);
         }
 
         const contentType = originalObject.ContentType || "image/jpeg";

@@ -51,6 +51,19 @@ export class AvailabilityController {
         return sendSuccess(res, CALENDAR_CODES.AVAILABILITY_UPDATED, { slots }, HTTP_STATUS.OK);
     }
 
+    static async getSlotsForDate(req: Request, res: Response) {
+        const userId = req.user?.userId;
+        if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
+
+        const { date } = req.query;
+        if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            return sendError(res, CALENDAR_CODES.INVALID_AVAILABILITY_DATA, HTTP_STATUS.BAD_REQUEST);
+        }
+
+        const data = await AvailabilityService.getSlotsForDate(userId, date);
+        return sendSuccess(res, CALENDAR_CODES.AVAILABILITY_FETCHED, data, HTTP_STATUS.OK);
+    }
+
     static async addOffDay(req: Request, res: Response) {
         const userId = req.user?.userId;
         if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);

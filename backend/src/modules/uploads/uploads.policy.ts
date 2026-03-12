@@ -2,9 +2,9 @@ import { UPLOAD_LIMITS } from "./uploads.constants";
 import { UploadTooLargeError, InvalidMimeTypeError, UploadCategoryNotAllowedError } from "./uploads.errors";
 
 type PolicyInput = {
-    category: keyof typeof UPLOAD_LIMITS;
-    fileSize: number;
-    mimeType: string;
+  category: keyof typeof UPLOAD_LIMITS;
+  fileSize: number;
+  mimeType: string;
 };
 
 export function enforceUploadPolicy(input: PolicyInput) {

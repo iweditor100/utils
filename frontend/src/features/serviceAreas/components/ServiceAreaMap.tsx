@@ -109,12 +109,12 @@ export const ServiceAreaMap: React.FC<ServiceAreaMapProps> = ({
         }
     }, [areas]);
 
-    // Refit bounds whenever areas change or map loads
+    // Refit bounds when areas load — but not while the user is actively editing
     useEffect(() => {
-        if (isLoaded && mapRef.current) {
+        if (isLoaded && mapRef.current && mode === "none") {
             fitBounds();
         }
-    }, [isLoaded, areas, fitBounds]);
+    }, [isLoaded, areas, fitBounds, mode]);
 
     const onLoad = useCallback((map: google.maps.Map) => {
         mapRef.current = map;

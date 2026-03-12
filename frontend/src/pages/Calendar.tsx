@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { socket } from "../lib/socket";
 import FullCalendar from "@fullcalendar/react";
@@ -17,17 +17,8 @@ import {
   useDeleteAllEventsMutation,
 } from "../features/users/calendarApi";
 import { useConnectGoogleMutation, useDisconnectGoogleMutation, useGetGoogleStatusQuery, useToggleGoogleSyncMutation, useImportFromGoogleMutation, useExportToGoogleMutation } from "../features/google/googleCalendarApi";
-import { useGetAvailabilityQuery, useUpdateScheduleMutation, useAddOffDayMutation, useRemoveOffDayMutation } from "../features/users/availabilityApi";
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-type DaySlot = { enabled: boolean; startTime: string; endTime: string };
-type WeekSchedule = Record<number, DaySlot>;
-
-const defaultWeekSchedule = (): WeekSchedule =>
-    Object.fromEntries(
-        Array.from({ length: 7 }, (_, i) => [i, { enabled: false, startTime: "09:00", endTime: "17:00" }])
-    ) as WeekSchedule;
+import { useGetAvailabilityQuery } from "../features/users/availabilityApi";
+import { AvailabilityEditor } from "../features/availability/components/AvailabilityEditor";
 
 // Helper to format date for datetime-local input (YYYY-MM-DDTHH:mm)
 const formatDateTimeLocal = (dateStr: string | Date) => {
@@ -95,56 +86,9 @@ const Calendar: React.FC = () => {
   const [exportStart, setExportStart] = useState("");
   const [exportEnd, setExportEnd] = useState("");
 
-  // Availability
+  // Availability — only used here for calendar background events
   const { data: availabilityData } = useGetAvailabilityQuery();
-  const [updateSchedule, { isLoading: isSavingSchedule }] = useUpdateScheduleMutation();
-  const [addOffDay, { isLoading: isAddingOffDay }] = useAddOffDayMutation();
-  const [removeOffDay] = useRemoveOffDayMutation();
   const [showAvailability, setShowAvailability] = useState(false);
-  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(defaultWeekSchedule());
-  const [offDayDate, setOffDayDate] = useState("");
-  const [offDayReason, setOffDayReason] = useState("");
-
-  // Sync server availability into local schedule state
-  useEffect(() => {
-    if (!availabilityData?.data) return;
-    const next = defaultWeekSchedule();
-    for (const slot of availabilityData.data.slots) {
-      next[slot.dayOfWeek] = { enabled: true, startTime: slot.startTime, endTime: slot.endTime };
-    }
-    setWeekSchedule(next);
-  }, [availabilityData]);
-
-  const handleSaveSchedule = useCallback(async () => {
-    const slots = Object.entries(weekSchedule)
-      .filter(([, v]) => v.enabled)
-      .map(([day, v]) => ({ dayOfWeek: Number(day), startTime: v.startTime, endTime: v.endTime }));
-    try {
-      await updateSchedule(slots).unwrap();
-    } catch (err) {
-      console.error("Failed to save schedule", err);
-    }
-  }, [weekSchedule, updateSchedule]);
-
-  const handleAddOffDay = useCallback(async () => {
-    if (!offDayDate) return;
-    try {
-      await addOffDay({ date: offDayDate, reason: offDayReason || undefined }).unwrap();
-      setOffDayDate("");
-      setOffDayReason("");
-    } catch (err) {
-      console.error("Failed to add off day", err);
-    }
-  }, [offDayDate, offDayReason, addOffDay]);
-
-  const handleRemoveOffDay = useCallback(async (date: string) => {
-    const dateOnly = date.split("T")[0];
-    try {
-      await removeOffDay(dateOnly).unwrap();
-    } catch (err) {
-      console.error("Failed to remove off day", err);
-    }
-  }, [removeOffDay]);
 
 
   const handleConnectGoogle = async () => {
@@ -400,124 +344,8 @@ const Calendar: React.FC = () => {
             </button>
 
             {showAvailability && (
-              <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50 space-y-6">
-                {/* Weekly Schedule */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Weekly Schedule</h4>
-                  <div className="space-y-2">
-                    {DAY_NAMES.map((name, day) => {
-                      const slot = weekSchedule[day];
-                      return (
-                        <div key={day} className="flex items-center gap-3 flex-wrap">
-                          <label className="flex items-center gap-2 w-16 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={slot.enabled}
-                              onChange={(e) =>
-                                setWeekSchedule((prev) => ({
-                                  ...prev,
-                                  [day]: { ...prev[day], enabled: e.target.checked },
-                                }))
-                              }
-                              className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{name}</span>
-                          </label>
-                          <input
-                            type="time"
-                            value={slot.startTime}
-                            disabled={!slot.enabled}
-                            onChange={(e) =>
-                              setWeekSchedule((prev) => ({
-                                ...prev,
-                                [day]: { ...prev[day], startTime: e.target.value },
-                              }))
-                            }
-                            className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                          />
-                          <span className="text-gray-400 text-sm">–</span>
-                          <input
-                            type="time"
-                            value={slot.endTime}
-                            disabled={!slot.enabled}
-                            onChange={(e) =>
-                              setWeekSchedule((prev) => ({
-                                ...prev,
-                                [day]: { ...prev[day], endTime: e.target.value },
-                              }))
-                            }
-                            className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <button
-                    onClick={handleSaveSchedule}
-                    disabled={isSavingSchedule}
-                    className="mt-4 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    {isSavingSchedule ? "Saving..." : "Save Schedule"}
-                  </button>
-                </div>
-
-                {/* Off Days */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Off Days</h4>
-                  <div className="flex items-center gap-2 flex-wrap mb-3">
-                    <input
-                      type="date"
-                      value={offDayDate}
-                      onChange={(e) => setOffDayDate(e.target.value)}
-                      className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Reason (optional)"
-                      value={offDayReason}
-                      onChange={(e) => setOffDayReason(e.target.value)}
-                      className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-800 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                    <button
-                      onClick={handleAddOffDay}
-                      disabled={!offDayDate || isAddingOffDay}
-                      className="h-8 px-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-                    >
-                      {isAddingOffDay ? "Adding..." : "Add Off Day"}
-                    </button>
-                  </div>
-
-                  {availabilityData?.data?.offDays?.length ? (
-                    <ul className="space-y-1">
-                      {availabilityData.data.offDays.map((od) => (
-                        <li key={od.id} className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                          <span className="font-medium">{od.date.split("T")[0]}</span>
-                          {od.reason && <span className="text-gray-400">— {od.reason}</span>}
-                          <button
-                            onClick={() => handleRemoveOffDay(od.date)}
-                            className="ml-auto text-red-500 hover:text-red-700 text-xs font-medium"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-gray-400">No off days set.</p>
-                  )}
-                </div>
-
-                {/* Legend */}
-                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-700">
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded-sm bg-green-400/50"></span>
-                    Available hours
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded-sm bg-red-400/50"></span>
-                    Off day
-                  </span>
-                </div>
+              <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
+                <AvailabilityEditor />
               </div>
             )}
           </div>
@@ -689,7 +517,7 @@ const Calendar: React.FC = () => {
 
                 <div className="flex gap-4">
                   {categories.map((cat) => (
-                    <label key={cat} className="flex items-center gap-2 cursor-pointer">
+                    <label key={cat} className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
                       <input
                         type="radio"
                         value={cat}

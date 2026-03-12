@@ -15,6 +15,7 @@ router.delete("/:id", CalendarController.deleteEvent);
 
 // Availability routes
 router.get("/availability", AvailabilityController.getAvailability);
+router.get("/availability/slots", AvailabilityController.getSlotsForDate);
 router.put("/availability/schedule", AvailabilityController.updateSchedule);
 router.post("/availability/off-days", AvailabilityController.addOffDay);
 router.delete("/availability/off-days/:date", AvailabilityController.removeOffDay);
