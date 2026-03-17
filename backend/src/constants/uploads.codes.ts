@@ -1,0 +1,15 @@
+export const UPLOAD_CODES = {
+  /* ========= SUCCESS (12xxxx) ========= */
+  UPLOAD_PRESIGN_SUCCESS:  120001,
+  UPLOAD_COMPLETE_SUCCESS: 120002,
+  UPLOAD_URL_SUCCESS:      120003,
+
+  /* ========= CLIENT ERRORS (12xxxx) ========= */
+  UPLOAD_INVALID_INPUT:    120101,
+  UPLOAD_NOT_FOUND:        120102,
+  UPLOAD_ACCESS_DENIED:    120103,
+  UPLOAD_INVALID_KEY:      120104,
+
+  /* ========= SERVER ERRORS (12xxxx) ========= */
+  UPLOAD_INTERNAL_ERROR:   120500,
+} as const;

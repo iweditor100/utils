@@ -377,11 +377,18 @@ backend/
   ---
 
   ### Uploads
+> currently in the frontend we have 2 types of hooks to upload, they will end up in one method only, the first hook is; useAvatarUpload.js, and useUploadWithProgress, we can endup with only: useUpload hook. 
+
+>flow of useAvatarUpload: get presign -> upload directly to r2 using fetch -> /complete.
+
+>flow of useUploadWithProgress: presign -> upload to r2 (xhr) -> /complete. 
+
 
 
   #### Routes
   - ``` /presign ``` : called for getting a valid presign
-  - ``` /complete ``` : 
+  - ``` /complete ``` : called after a succesfull upload to the R2 object. 
+  
 
 
   #### R2
@@ -436,11 +443,15 @@ backend/
   **b. create the key**
 
   This is the only function that creates the key for me.
-
+   
 
   **c. call the `storage.service.ts`**
 
   This is used for getting the `uploadURL`.
+
+
+
+  
 
 
 

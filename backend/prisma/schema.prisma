@@ -32,6 +32,7 @@ model User {
   userSetting                UserSetting?
   availability               UserAvailability[]
   offDays                    UserOffDay[]
+  uploads                    Upload[]
 
   @@index([deletedAt])
   @@map("users")
@@ -259,6 +260,21 @@ model UserSetting {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
+}
+
+model Upload {
+  id        String   @id @default(uuid())
+  ownerId   String
+  key       String   @unique
+  mimeType  String
+  size      Int
+  category  String
+  createdAt DateTime @default(now())
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("uploads")
 }
 
 model UserAvailability {

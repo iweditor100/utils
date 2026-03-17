@@ -7,13 +7,31 @@ export type PresignUploadRequest = {
   fileName: string;
   fileSize: number;
   mimeType: string;
-  category: "avatar";
+  category: string;
 };
 
 /** Response from presign: upload URL for direct PUT to R2, and key for building public URL. */
 export type PresignUploadResponse = {
   uploadUrl: string;
   key: string;
+};
+
+/** Request body for POST /uploads/complete. */
+export type CompleteUploadRequest = {
+  key: string;
+  category: string;
+  mimeType: string;
+  size: number;
+};
+
+/** Response from complete: DB id of the created upload record. */
+export type CompleteUploadResponse = {
+  id: string;
+};
+
+/** Response from GET /uploads/:fileId/url */
+export type GetDownloadUrlResponse = {
+  url: string;
 };
 
 export const uploadsApi = createApi({
@@ -33,17 +51,33 @@ export const uploadsApi = createApi({
       }),
     }),
 
+    /** Notify backend the upload is done. Persists metadata and returns the DB file id. */
     completeUpload: builder.mutation<
-      ApiSuccess<{}>,
-      { key: string; category: "avatar" }
+      ApiSuccess<CompleteUploadResponse>,
+      CompleteUploadRequest
     >({
       query: (body) => ({
         url: "/uploads/complete",
         method: "POST",
         data: body,
-      })
-    })
+      }),
+    }),
+
+    /** Get a short-lived presigned GET URL for a file the user owns. */
+    getDownloadUrl: builder.query<
+      ApiSuccess<GetDownloadUrlResponse>,
+      string // fileId
+    >({
+      query: (fileId) => ({
+        url: `/uploads/${fileId}/url`,
+        method: "GET",
+      }),
+    }),
   }),
 });
 
-export const { usePresignUploadMutation, useCompleteUploadMutation } = uploadsApi;
+export const {
+  usePresignUploadMutation,
+  useCompleteUploadMutation,
+  useLazyGetDownloadUrlQuery,
+} = uploadsApi;

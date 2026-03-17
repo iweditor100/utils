@@ -1,70 +1,63 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { sendError, sendSuccess } from "../../utils";
-import { HTTP_STATUS } from "../../constants";
+import { HTTP_STATUS, UPLOAD_CODES } from "../../constants";
 import { imageQueue } from "./image.queue";
-import type { UploadCategory } from "./uploads.constants";
-
-
-
-const COMPLETE_UPLOAD_CODE = 121214;
-const INVALID_INPUT_CODE = 121215;
-
+import { createUpload } from "./uploads.repository";
 
 const completeSchema = z.object({
-    key: z.string().min(1),
-    category: z.string()
-})
+    key:      z.string().min(1),
+    category: z.string().min(1),
+    mimeType: z.string().min(1),
+    size:     z.number().int().positive(),
+});
 
 export async function completeUploadController(req: Request, res: Response) {
     try {
-        console.log("[COMPLETE] Received request:", req.body);
-        const userId = req.user?.userId
+        const userId = req.user?.userId;
 
         const parsed = completeSchema.safeParse(req.body);
         if (!parsed.success) {
-            return sendError(
-                res,
-                INVALID_INPUT_CODE,
-                HTTP_STATUS.BAD_REQUEST
-            )
+            return sendError(res, UPLOAD_CODES.UPLOAD_INVALID_INPUT, HTTP_STATUS.BAD_REQUEST);
         }
 
-        const { key, category } = parsed.data;
+        const { key, category, mimeType, size } = parsed.data;
 
-        // if (category !== "avatar") {
-        //     return sendSuccess(res, COMPLETE_UPLOAD_CODE, {}, HTTP_STATUS.OK);
-        // }
+        // Verify the key was issued for this user. Keys are structured as
+        // "{prefix}/{userId}/..." so the userId must appear as a path segment.
+        // This prevents a user from completing (and thereby claiming) another
+        // user's upload key.
+        if (!key.includes(`/${userId}/`)) {
+            return sendError(res, UPLOAD_CODES.UPLOAD_INVALID_KEY, HTTP_STATUS.FORBIDDEN);
+        }
 
+        // Persist file metadata. upsert is used so that duplicate /complete
+        // calls (e.g. from a client retry) are idempotent.
+        // mimeType and size come from the frontend but were already validated
+        // against UPLOAD_LIMITS at presign time, so we trust them here.
+        const upload = await createUpload({ ownerId: userId as string, key, mimeType, size, category });
 
+        // Queue image processing if applicable. Failure here does NOT roll back
+        // the DB record — the file is in R2 and tracked; processing can be
+        // retried separately.
         try {
-            console.log("Adding to imageQueue");
             await imageQueue.add(
                 "generate-avatar-thumbnails",
-                {
-                    key,
-                    userId,
-                },
+                { key, userId },
                 {
                     attempts: 3,
-                    backoff: {
-                        type: "exponential",
-                        delay: 2000,
-                    },
+                    backoff: { type: "exponential", delay: 2000 },
                     removeOnComplete: true,
                     removeOnFail: false,
                 }
             );
         } catch (queueError) {
-            console.error("[COMPLETE] Failed to add to imageQueue (Redis might be down):", queueError);
-            // We still return success because the file is already in R2/S3
+            console.error("[COMPLETE] Failed to enqueue image job:", queueError);
         }
-        return sendSuccess(res, COMPLETE_UPLOAD_CODE, {}, HTTP_STATUS.OK);
+
+        return sendSuccess(res, UPLOAD_CODES.UPLOAD_COMPLETE_SUCCESS, { id: upload.id }, HTTP_STATUS.OK);
     } catch (error) {
-        return sendError(
-            res,
-            INVALID_INPUT_CODE,
-            HTTP_STATUS.BAD_REQUEST,
-        )
+        console.error("[COMPLETE] Unexpected error:", error);
+        return sendError(res, UPLOAD_CODES.UPLOAD_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     }
 }

@@ -1,5 +1,6 @@
 import { AUTH_CODES } from "./auth.codes";
 import { USER_CODES } from "./user.codes";
+import { UPLOAD_CODES } from "./uploads.codes";
 import { CALENDAR_CODES } from "./calendar.codes";
 
 export const RESPONSE_MESSAGES: Record<number, string> = {
@@ -36,6 +37,16 @@ export const RESPONSE_MESSAGES: Record<number, string> = {
     [CALENDAR_CODES.OFF_DAY_REMOVED]: "Off day removed",
     [CALENDAR_CODES.OFF_DAY_NOT_FOUND]: "Off day not found",
     [CALENDAR_CODES.INVALID_AVAILABILITY_DATA]: "Invalid availability data",
+
+    // -------- UPLOADS --------
+    [UPLOAD_CODES.UPLOAD_PRESIGN_SUCCESS]:  "Upload URL generated",
+    [UPLOAD_CODES.UPLOAD_COMPLETE_SUCCESS]: "Upload recorded",
+    [UPLOAD_CODES.UPLOAD_URL_SUCCESS]:      "Download URL generated",
+    [UPLOAD_CODES.UPLOAD_INVALID_INPUT]:    "Invalid upload input",
+    [UPLOAD_CODES.UPLOAD_NOT_FOUND]:        "File not found",
+    [UPLOAD_CODES.UPLOAD_ACCESS_DENIED]:    "Access denied",
+    [UPLOAD_CODES.UPLOAD_INVALID_KEY]:      "Invalid file key",
+    [UPLOAD_CODES.UPLOAD_INTERNAL_ERROR]:   "Upload service error",
 
     // -------- SERVER ERRORS --------
     [AUTH_CODES.AUTH_INTERNAL_ERROR]: "Auth internal error",

@@ -3,7 +3,7 @@
  * that browsers often fail to identify.
  */
 const EXTENSION_MAP: Record<string, string> = {
-    'CR2': 'image/CR2',
+    'cr2': 'image/x-canon-cr2',
     'cr3': 'image/x-canon-cr3',
     'nef': 'image/x-nikon-nef',
     'arw': 'image/x-sony-arw',

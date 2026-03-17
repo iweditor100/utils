@@ -22,4 +22,15 @@ export class UploadError extends Error {
       super(`Upload category not allowed: ${category}`);
     }
   }
-  
+
+  export class UploadNotFoundError extends UploadError {
+    constructor() {
+      super("File not found");
+    }
+  }
+
+  export class UploadAccessDeniedError extends UploadError {
+    constructor() {
+      super("Access denied");
+    }
+  }

@@ -11,7 +11,11 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   // Frontend
-  FRONTEND_ORIGIN: z.string().url(),
+  // FRONTEND_ORIGIN: [z.string().url()], single url. 
+  FRONTEND_ORIGIN: z
+    .string()
+    .min(1, "FRONTEND_ORIGIN is required")
+    .transform((val) => val.split(",").map((v) => v.trim())),
 
   // Auth
   ACCESS_TOKEN_SECRET: z.string().min(32),
@@ -39,6 +43,13 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(300),
+
+  R2_PRESIGN_DOWNLOAD_EXPIRES_IN_SECONDS: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(900),
 
   // Worker /enqueue URL. Backend only enqueues key; no image processing.
   IMAGE_QUEUE_INGESTION_URL: z.string().url().optional(),

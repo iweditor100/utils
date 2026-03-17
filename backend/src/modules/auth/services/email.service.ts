@@ -17,8 +17,8 @@ export const emailService = {
         from: SMTP_FROM,
         to,
         subject: "Verify your email",
-        text: `Verify your account: ${process.env.FRONTEND_ORIGIN}/verify-email?token=${token}`,
-        html: `<p>Verify your account: <a href='${process.env.FRONTEND_ORIGIN}/verify-email?token=${token}'>Verify Email</a></p>`
+        text: `Verify your account: ${process.env.FRONTEND_ORIGIN_use}/verify-email?token=${token}`,
+        html: `<p>Verify your account: <a href='${process.env.FRONTEND_ORIGIN_use}/verify-email?token=${token}'>Verify Email, This email verification link is only valid for 15 mins.</a></p>`
       });
     } catch (e) {
       // Never throw: mail failure cannot leak
@@ -31,8 +31,8 @@ export const emailService = {
         from: SMTP_FROM,
         to,
         subject: "Reset your password",
-        text: `Reset your password: ${process.env.FRONTEND_ORIGIN}/reset-password?token=${token}`,
-        html: `<p>Reset your password: <a href='${process.env.FRONTEND_ORIGIN}/reset-password?token=${token}'>Reset Password</a></p>`
+        text: `Reset your password: ${process.env.FRONTEND_ORIGIN_use}/reset-password?token=${token}`,
+        html: `<p>Reset your password: <a href='${process.env.FRONTEND_ORIGIN_use}/reset-password?token=${token}'>Reset Password</a></p>`
       });
     } catch (e) {
       // Never throw: mail failure cannot leak

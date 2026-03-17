@@ -10,3 +10,7 @@ export const presignUploadSchema = z.object({
 });
 
 export type PresignUploadInput = z.infer<typeof presignUploadSchema>;
+
+export const fileIdParamSchema = z.object({
+    fileId: z.string().uuid(),
+});

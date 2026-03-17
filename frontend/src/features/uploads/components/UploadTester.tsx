@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUploadWithProgress } from '../../../hooks/useUploadWithProgress';
+import { useDownloadFile } from '../../../hooks/useDownloadFile';
 import { UploadProgressBar } from '../../../components/ui/UploadProgressBar';
 import toast from 'react-hot-toast';
 import { useFilePreview } from '../../../utils/useFilePreview';
@@ -14,19 +15,26 @@ export function UploadItem({
     triggerAll: boolean
 }) {
     const { upload, progress, status, error, cancel } = useUploadWithProgress();
+    const { download, isLoading: isDownloading } = useDownloadFile();
+    const [fileId, setFileId] = useState<string | null>(null);
 
     const { url: previewUrl, type, ext } = useFilePreview(file);
 
     const isImage = type === "image";
     const isVideo = type === "video";
 
-
     const handleUpload = async () => {
         try {
-            await upload(file, 'testing');
+            const result = await upload(file, 'testing');
+            if (result) setFileId(result.fileId);
         } catch (err) {
             console.error('Upload failed:', err);
         }
+    };
+
+    const handleDownload = () => {
+        if (!fileId) return;
+        download(fileId, file.name).catch(() => toast.error('Download failed'));
     };
 
     useEffect(() => {
@@ -132,6 +140,16 @@ export function UploadItem({
 
                 {status === 'done' && (
                     <span className="text-green-600">100%</span>
+                )}
+
+                {status === 'done' && fileId && (
+                    <button
+                        onClick={handleDownload}
+                        disabled={isDownloading}
+                        className="text-blue-600 hover:underline font-medium text-xs disabled:opacity-50"
+                    >
+                        {isDownloading ? 'Fetching...' : 'Download'}
+                    </button>
                 )}
             </div>
 
