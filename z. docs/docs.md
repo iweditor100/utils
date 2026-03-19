@@ -175,8 +175,6 @@ backend/
 
   ---
 
-
-
 ## Frontend Folder Structure
 ```
   frontend/
@@ -489,11 +487,21 @@ The backend now knows that a valid key object exists in the R2 object.
   
 
 
-  
-  
-
-
   ---
+
+
+
+
+   ### Downloads
+
+
+flow: 
+
+from low level to high level: 
+storage.service.ts: 
+
+
+How is the download working? 
 
   ### Prisma
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { presignPutObject } from "../infra/storage/storage.service";
+import { zipQueue } from "../modules/downloads/queue/zip.queue";
 const router = Router()
 
 
@@ -10,17 +11,29 @@ router.get("/", (req, res) => {
 });
 
 
-router.get("/presign-test", async (_req, res, next) => {
-  try {
-    const result = await presignPutObject({
-      key: "yogarth/human.exe",
-      contentType: "text/jpg",
-    });
 
-    res.json(result);
-  } catch (err) {
-    next(err);
+
+
+
+
+router.post("/test-zip", async (req, res) => {
+  try {
+    const job = await zipQueue.add("zip-jo", {
+      jobId: "dev-test-" + Date.now(),
+      fileKeys: [
+        "nonononononononononononononononononononononononononononoonononononononooonoonooonoonononononopnkono"
+      ],
+    })
+
+    return res.json({
+      message: "Zip job addded",
+      jobId: job.id,
+    })
+  } catch( error: any ) {
+    return res.status(500).json({
+      error: error.message,
+    })
   }
-});
+})
 
 export default router;

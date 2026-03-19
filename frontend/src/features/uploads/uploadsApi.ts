@@ -34,10 +34,32 @@ export type GetDownloadUrlResponse = {
   url: string;
 };
 
+export type UploadItem = {
+  id: string;
+  key: string;
+  mimeType: string;
+  size: number;
+  category: string;
+  createdAt: string;
+};
+
+export type ListUploadsRequest = {
+  page?: number;
+  limit?: number;
+};
+
+export type ListUploadsResponse = {
+  uploads: UploadItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 export const uploadsApi = createApi({
   reducerPath: "uploadsApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: [],
+  tagTypes: ["Uploads"],
   endpoints: (builder) => ({
     /** Get presigned PUT URL and object key. Auth required. */
     presignUpload: builder.mutation<
@@ -73,6 +95,19 @@ export const uploadsApi = createApi({
         method: "GET",
       }),
     }),
+
+    /** List all uploads belonging to the authenticated user. */
+    listUploads: builder.query<
+      ApiSuccess<ListUploadsResponse>,
+      ListUploadsRequest
+    >({
+      query: ({ page = 1, limit = 20 } = {}) => ({
+        url: "/uploads",
+        method: "GET",
+        params: { page, limit },
+      }),
+      providesTags: ["Uploads"],
+    }),
   }),
 });
 
@@ -80,4 +115,5 @@ export const {
   usePresignUploadMutation,
   useCompleteUploadMutation,
   useLazyGetDownloadUrlQuery,
+  useListUploadsQuery,
 } = uploadsApi;

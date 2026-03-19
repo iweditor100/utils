@@ -34,6 +34,7 @@ import BarChart from "../pages/Charts/BarChart";
 import NotFound from "../pages/OtherPage/NotFound";
 import CalendarReplica from "../experimental/calendar-replica/CalendarReplica";
 import { UploadTester } from "../features/uploads/components/UploadTester";
+import UploadsPage from "../pages/Uploads";
 
 export const AppRoutes = () => {
     return (
@@ -79,6 +80,7 @@ export const AppRoutes = () => {
                 <Route path="/line-chart" element={<LineChart />} />
                 <Route path="/bar-chart" element={<BarChart />} />
                 <Route path="/upload-test" element={<UploadTester />} />
+                <Route path="/uploads" element={<UploadsPage />} />
             </Route>
 
             <Route path="/ui-test/calendar-replica" element={<CalendarReplica />} />

@@ -7,7 +7,7 @@ import { Toaster } from "react-hot-toast";
 export default function App() {
   return (
     <BrowserRouter>
-      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }}   containerStyle={{ zIndex: 999999 }} />
       <ScrollToTop />
       <AuthInitializer>
         <AppRoutes />

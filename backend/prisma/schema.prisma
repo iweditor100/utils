@@ -33,6 +33,7 @@ model User {
   availability               UserAvailability[]
   offDays                    UserOffDay[]
   uploads                    Upload[]
+  downloadJobs               DownloadJob[]
 
   @@index([deletedAt])
   @@map("users")
@@ -276,6 +277,37 @@ model Upload {
   @@index([ownerId])
   @@map("uploads")
 }
+
+
+
+
+// download. 
+model DownloadJob {
+  id          String   @id @default(uuid())
+  userId      String
+
+  status      DownloadStatus @default(QUEUED)
+
+  fileIds     String[]
+  zipKey      String?
+
+  progress    Int?
+  error       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expiresAt   DateTime?
+
+  user        User @relation(fields: [userId], references: [id])
+}
+
+enum DownloadStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 
 model UserAvailability {
   id        String   @id @default(uuid())

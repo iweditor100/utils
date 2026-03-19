@@ -2,6 +2,7 @@ import { AUTH_CODES } from "./auth.codes";
 import { USER_CODES } from "./user.codes";
 import { UPLOAD_CODES } from "./uploads.codes";
 import { CALENDAR_CODES } from "./calendar.codes";
+import { DOWNLOAD_CODES } from "./download.codes";
 
 export const RESPONSE_MESSAGES: Record<number, string> = {
     // -------- SUCCESS --------
@@ -47,6 +48,12 @@ export const RESPONSE_MESSAGES: Record<number, string> = {
     [UPLOAD_CODES.UPLOAD_ACCESS_DENIED]:    "Access denied",
     [UPLOAD_CODES.UPLOAD_INVALID_KEY]:      "Invalid file key",
     [UPLOAD_CODES.UPLOAD_INTERNAL_ERROR]:   "Upload service error",
+
+    // -------- DOWNLOADS --------
+    [DOWNLOAD_CODES.DOWNLOAD_SUCCESS]:       "Download ready",
+    [DOWNLOAD_CODES.DOWNLOAD_QUEUED]:        "Download job queued",
+    [DOWNLOAD_CODES.DOWNLOAD_FAILED]:        "Download failed",
+    [DOWNLOAD_CODES.DOWNLOAD_JOB_NOT_FOUND]: "Download job not found",
 
     // -------- SERVER ERRORS --------
     [AUTH_CODES.AUTH_INTERNAL_ERROR]: "Auth internal error",

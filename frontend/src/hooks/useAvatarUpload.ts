@@ -53,10 +53,7 @@ export function useAvatarUpload() {
 
 
     // notify the backend upload completed.
-    await completeUpload({
-      key,
-      category: "avatar"
-    }).unwrap();
+    await completeUpload({ key, category: "avatar" , mimeType: file.type, size: file.size}).unwrap();
 
     console.log("Upload completed, notified the backend:  ", key);
 

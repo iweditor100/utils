@@ -1,6 +1,8 @@
 // Presign PUT/GET for R2. Backend does not stream file bytes.
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Upload } from "@aws-sdk/lib-storage";
+import type { Readable } from "stream";
 import { r2Client } from "./r2.client";
 import { STORAGE_CONFIG } from "./storage.config";
 
@@ -30,11 +32,40 @@ export async function presignGetObject(key: string) {
     Bucket: STORAGE_CONFIG.bucket,
     Key: key,
   });
+  console.log("called the get Presign for get object. ")
   const downloadUrl = await getSignedUrl(r2Client, command, {
     expiresIn: STORAGE_CONFIG.presignDownloadExpiresInSeconds,
   });
   return { downloadUrl };
 }
 
+// Streams a Readable directly into R2 via multipart upload.
+// Use this for large or dynamically-generated content (e.g. ZIP files)
+// where Content-Length is unknown upfront.
+export async function uploadStreamToR2(key: string, stream: Readable, contentType = "application/zip") {
+  const upload = new Upload({
+    client: r2Client,
+    params: {
+      Bucket: STORAGE_CONFIG.bucket,
+      Key: key,
+      Body: stream,
+      ContentType: contentType,
+    },
+  });
+  await upload.done();
+}
 
+// Returns the raw Node.js Readable stream for a key without buffering.
+export async function getFileStreamFromR2(key: string): Promise<Readable> {
+  const response = await r2Client.send(
+    new GetObjectCommand({ Bucket: STORAGE_CONFIG.bucket, Key: key })
+  );
+  return response.Body as Readable;
+}
 
+// Permanently removes an object from R2.
+export async function deleteObject(key: string) {
+  await r2Client.send(
+    new DeleteObjectCommand({ Bucket: STORAGE_CONFIG.bucket, Key: key })
+  );
+}

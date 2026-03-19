@@ -6,6 +6,7 @@ import {
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
+  FolderIcon,
   GridIcon,
   HorizontaLDots,
   ListIcon,
@@ -52,6 +53,11 @@ const navItems: NavItem[] = [
     icon: <TimeIcon />,
     name: "Availability",
     path: "/check-availability",
+  },
+  {
+    icon: <FolderIcon />,
+    name: "Your Uploads",
+    path: "/uploads",
   },
   {
     name: "Forms",

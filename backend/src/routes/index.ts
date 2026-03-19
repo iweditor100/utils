@@ -10,9 +10,7 @@ import uploadsRouter from "../modules/uploads/uploads.routes";
 import calendarRoutes from "../modules/calendar/calendar.routes";
 import googleCalendarRoutes from "../modules/google/googleCalendar.routes";
 import serviceAreaRoutes from "../modules/service-areas/service-area.routes";
-
-
-
+import downloadsRouter from "../modules/downloads/routes/downlaods.routes";
 
 const router = Router();
 
@@ -28,7 +26,9 @@ router.use("/uploads", uploadsRouter);
 router.use("/events", calendarRoutes)
 router.use("/google", googleCalendarRoutes)
 
-// service routes: 
+// service routes:
 router.use("/service-areas", serviceAreaRoutes);
+
+router.use("/downloads", downloadsRouter);
 
 export default router;

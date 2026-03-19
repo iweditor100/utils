@@ -3,7 +3,7 @@ import { enforceUploadPolicy } from "./uploads.policy";
 import { UPLOAD_LIMITS } from "./uploads.constants";
 import type { PresignUploadInput, PresignUploadResult } from "./uploads.types";
 import { presignPutObject, presignGetObject } from "../../infra/storage/storage.service";
-import { findUploadById } from "./uploads.repository";
+import { findUploadById, findUploadsByOwnerId } from "./uploads.repository";
 import { UploadNotFoundError, UploadAccessDeniedError } from "./uploads.errors";
 
 function extractExtension(fileName: string): string {
@@ -38,6 +38,8 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
 }
 
 export async function getDownloadUrl(fileId: string, userId: string) {
+
+    console.log("getDownloadURL service called with file ID file: ", fileId, "userId: ",userId);
     const upload = await findUploadById(fileId);
 
     if (!upload) {
@@ -50,4 +52,15 @@ export async function getDownloadUrl(fileId: string, userId: string) {
 
     const { downloadUrl } = await presignGetObject(upload.key);
     return { url: downloadUrl };
+}
+
+export async function listUploads(userId: string, page: number, limit: number) {
+    const { uploads, total } = await findUploadsByOwnerId(userId, page, limit);
+    return {
+        uploads,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+    };
 }

@@ -15,7 +15,7 @@ export function UploadItem({
     triggerAll: boolean
 }) {
     const { upload, progress, status, error, cancel } = useUploadWithProgress();
-    const { download, isLoading: isDownloading } = useDownloadFile();
+    const { download, progress: downloadProgress, status: downloadStatus, cancel: cancelDownload } = useDownloadFile();
     const [fileId, setFileId] = useState<string | null>(null);
 
     const { url: previewUrl, type, ext } = useFilePreview(file);
@@ -36,6 +36,8 @@ export function UploadItem({
         if (!fileId) return;
         download(fileId, file.name).catch(() => toast.error('Download failed'));
     };
+
+    const isDownloading = downloadStatus === 'fetching-url' || downloadStatus === 'downloading';
 
     useEffect(() => {
         if (triggerAll && status === 'idle') {
@@ -124,6 +126,24 @@ export function UploadItem({
                 status={status}
                 onCancel={cancel}
             />
+
+            {isDownloading && (
+                <div className="w-full space-y-1">
+                    <div className="flex justify-between text-xs text-gray-500">
+                        <span>{downloadStatus === 'fetching-url' ? 'Preparing…' : 'Downloading…'}</span>
+                        <span>{downloadProgress}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-green-500 rounded-full transition-all duration-150"
+                            style={{ width: `${downloadProgress}%` }}
+                        />
+                    </div>
+                    <button onClick={cancelDownload} className="text-xs text-red-500 hover:underline">
+                        Cancel
+                    </button>
+                </div>
+            )}
 
             <div className="flex justify-between items-center text-[10px] uppercase font-bold">
                 <span className={
