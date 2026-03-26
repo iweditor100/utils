@@ -36,6 +36,16 @@ export const createImageWorker = () => {
         return;
       }
 
+      // Skip unsupported formats before fetching from R2.
+      // CR2/NEF/ARW and other RAW formats are not supported by Sharp —
+      // downloading them just to fail wastes bandwidth and saturates the event loop.
+      const SUPPORTED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".tif", ".tiff"]);
+      const ext = key.slice(key.lastIndexOf(".")).toLowerCase();
+      if (!SUPPORTED_EXTENSIONS.has(ext)) {
+        console.log("[image] unsupported format, skipping:", key);
+        return;
+      }
+
       const thumbKey = key.replace("original", "thumb");
       const mediumKey = key.replace("original", "medium");
 

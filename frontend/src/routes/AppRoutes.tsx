@@ -35,6 +35,7 @@ import NotFound from "../pages/OtherPage/NotFound";
 import CalendarReplica from "../experimental/calendar-replica/CalendarReplica";
 import { UploadTester } from "../features/uploads/components/UploadTester";
 import UploadsPage from "../pages/Uploads";
+import DownloadReadyPage from "../pages/DownloadReady";
 
 export const AppRoutes = () => {
     return (
@@ -81,6 +82,7 @@ export const AppRoutes = () => {
                 <Route path="/bar-chart" element={<BarChart />} />
                 <Route path="/upload-test" element={<UploadTester />} />
                 <Route path="/uploads" element={<UploadsPage />} />
+                <Route path="/downloads/:jobId" element={<DownloadReadyPage />} />
             </Route>
 
             <Route path="/ui-test/calendar-replica" element={<CalendarReplica />} />

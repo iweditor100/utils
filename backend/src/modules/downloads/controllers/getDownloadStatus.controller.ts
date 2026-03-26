@@ -10,7 +10,7 @@ export const getDownloadStatusController = async (req: Request, res: Response) =
 
     const job = await getDownloadJob(jobId);
 
-    if (!job) {
+    if (!job || job.userId !== req.user?.userId) {
         return sendError(res, DOWNLOAD_CODES.DOWNLOAD_JOB_NOT_FOUND, HTTP_STATUS.NOT_FOUND);
     }
 

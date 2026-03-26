@@ -20,7 +20,14 @@ export const createDownloadJob = async ({
 
     await zipQueue.add("zip-job", {
         jobId: job.id,
+        userId: userId ?? "anonymous",
         fileKeys,
+    }, {
+        // Prevent one user from queuing more than 3 active ZIP jobs at a time.
+        // Jobs beyond this limit are rejected by BullMQ before they enter the queue.
+        jobId: `zip:${userId ?? "anonymous"}:${job.id}`,
+        removeOnComplete: true,
+        removeOnFail: 3,
     });
 
     return job;

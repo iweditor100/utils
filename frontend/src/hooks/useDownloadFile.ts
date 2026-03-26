@@ -11,6 +11,67 @@ export interface UseDownloadFileResult {
     cancel: () => void;
 }
 
+const supportsFileSystemAccess = typeof window !== 'undefined' && 'showSaveFilePicker' in window;
+
+// Streams the response body directly to disk via the File System Access API.
+// Peak RAM = one chunk (~64KB), regardless of file size.
+async function streamToDisk(
+    response: Response,
+    filename: string,
+    total: number,
+    onProgress: (p: number) => void,
+): Promise<void> {
+    const fileHandle = await (window as any).showSaveFilePicker({ suggestedName: filename });
+    const writable = await fileHandle.createWritable();
+    const reader = response.body!.getReader();
+    let loaded = 0;
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            await writable.write(value);
+            loaded += value.length;
+            if (total > 0) onProgress(Math.round((loaded / total) * 100));
+        }
+        await writable.close();
+    } catch (err) {
+        await writable.abort();
+        throw err;
+    }
+}
+
+// Fallback: accumulates chunks in memory then triggers an <a> download.
+// Used when File System Access API is unavailable (Firefox, Safari).
+async function streamToBlob(
+    response: Response,
+    filename: string,
+    total: number,
+    onProgress: (p: number) => void,
+): Promise<void> {
+    const reader = response.body!.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.length;
+        if (total > 0) onProgress(Math.round((loaded / total) * 100));
+    }
+
+    const blob = new Blob(chunks);
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+}
+
 export function useDownloadFile(): UseDownloadFileResult {
     const [progress, setProgress] = useState(0);
     const [status, setStatus] = useState<DownloadStatus>('idle');
@@ -40,38 +101,19 @@ export function useDownloadFile(): UseDownloadFileResult {
             const result = await getDownloadUrl(fileId).unwrap();
             const url = result.data.url;
 
-            console.log("url we got: ", url);
             setStatus('downloading');
             const response = await fetch(url, { signal: abortRef.current.signal });
-            console.log(" response: ", response);
             if (!response.ok) throw new Error(`Download failed: ${response.status}`);
             if (!response.body) throw new Error('No response body');
 
             const contentLength = response.headers.get('Content-Length');
             const total = contentLength ? parseInt(contentLength, 10) : 0;
-            const reader = response.body.getReader();
-            const chunks: Uint8Array[] = [];
-            let loaded = 0;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                loaded += value.length;
-                if (total > 0) {
-                    setProgress(Math.round((loaded / total) * 100));
-                }
+            if (supportsFileSystemAccess) {
+                await streamToDisk(response, filename, total, setProgress);
+            } else {
+                await streamToBlob(response, filename, total, setProgress);
             }
-
-            const blob = new Blob(chunks);
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
 
             setProgress(100);
             setStatus('done');

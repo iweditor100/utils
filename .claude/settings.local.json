@@ -7,7 +7,10 @@
       "Bash(find /c/work/yogarth/projects/iwutils/cursor -type f -name \"*availability*\" -o -name \"*Availability*\" 2>/dev/null | head -20)",
       "Bash(find /c/work/yogarth/projects/iwutils/cursor/frontend/src/hooks -type f | xargs grep -l \"availability\\\\|Availability\" 2>/dev/null)",
       "Bash(find /c/work/yogarth/projects/iwutils/cursor/frontend/src -type f -name \"*.tsx\" -o -name \"*.ts\" | xargs grep -l \"AvailabilitySettings\\\\|useMultipartUpload\\\\|useUploadWithProgress\" 2>/dev/null)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(grep -r \"SMTP_\\\\|EMAIL_\" /c/work/yogarth/projects/iwutils/cursor/backend/src --include=*.ts --include=*.js)"
     ]
   }
 }

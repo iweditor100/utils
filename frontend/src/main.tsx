@@ -11,6 +11,7 @@ import "flatpickr/dist/flatpickr.css";
 
 import { StrictMode } from "react";
 import { ThemeProvider } from "./context/ThemeContext.tsx";
+import { SocketProvider } from "./context/SocketProvider.tsx";
 import { createRoot } from "react-dom/client";
 import { AppWrapper } from "./components/common/PageMeta.tsx";
 
@@ -20,9 +21,11 @@ createRoot(document.getElementById("root")!).render(
   <Provider store={store}>
     <GoogleOAuthProvider clientId={googleClientId}>
       <ThemeProvider>
-        <AppWrapper>
-          <App />
-        </AppWrapper>
+        <SocketProvider>
+          <AppWrapper>
+            <App />
+          </AppWrapper>
+        </SocketProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>
   </Provider>

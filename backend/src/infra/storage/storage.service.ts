@@ -1,5 +1,5 @@
 // Presign PUT/GET for R2. Backend does not stream file bytes.
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { Readable } from "stream";
@@ -32,7 +32,6 @@ export async function presignGetObject(key: string) {
     Bucket: STORAGE_CONFIG.bucket,
     Key: key,
   });
-  console.log("called the get Presign for get object. ")
   const downloadUrl = await getSignedUrl(r2Client, command, {
     expiresIn: STORAGE_CONFIG.presignDownloadExpiresInSeconds,
   });
@@ -68,4 +67,17 @@ export async function deleteObject(key: string) {
   await r2Client.send(
     new DeleteObjectCommand({ Bucket: STORAGE_CONFIG.bucket, Key: key })
   );
+}
+
+
+
+// Returns true if the key exists in R2, false if not found.
+export async function headObject(key: string): Promise<boolean> {
+  try {
+    await r2Client.send(new HeadObjectCommand({ Bucket: STORAGE_CONFIG.bucket, Key: key }));
+    return true;
+  } catch (err: any) {
+    if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) return false;
+    throw err;
+  }
 }

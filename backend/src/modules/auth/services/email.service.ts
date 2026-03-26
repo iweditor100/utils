@@ -37,6 +37,35 @@ export const emailService = {
     } catch (e) {
       // Never throw: mail failure cannot leak
     }
-  }
+  },
+
+  async sendZipReadyEmail({ to, jobId }: { to: string; jobId: string }) {
+    if (!to || !jobId) return;
+    const pageUrl = `${process.env.FRONTEND_ORIGIN_use}/downloads/${jobId}`;
+    try {
+      const info = await transporter.sendMail({
+        from: SMTP_FROM,
+        to,
+        subject: "Your ZIP file is ready to download",
+        text: `Your ZIP file is ready. Go here to download it: ${pageUrl}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Your ZIP is ready</h2>
+            <p style="color: #555;">Your requested files have been packaged and are ready to download.</p>
+            <a
+              href="${pageUrl}"
+              style="display: inline-block; margin: 16px 0; padding: 12px 24px; background: #6366f1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600;"
+            >
+              Go to Downloads
+            </a>
+            <p style="color: #999; font-size: 12px;">The download link on that page is valid for 24 hours.</p>
+          </div>
+        `,
+      });
+      console.log(`[email] zip-ready sent to ${to} — messageId: ${info.messageId}`);
+    } catch (e: any) {
+      console.error(`[email] zip-ready FAILED to ${to}:`, e?.message);
+    }
+  },
 };
 

@@ -23,8 +23,17 @@ export async function createUpload(data: CreateUploadInput) {
 // Fetches a single upload by its DB id. Returns null if not found.
 export async function findUploadById(id: string) {
   const prisma = getPrisma();
-  console.log("finding the file by the fileId inthe repositry")
   return prisma.upload.findUnique({ where: { id } });
+}
+
+// Fetches uploads by their R2 keys, filtered to a specific owner.
+// Used to verify fileKey ownership before queuing a ZIP job.
+export async function findUploadsByKeysAndOwner(keys: string[], ownerId: string) {
+  const prisma = getPrisma();
+  return prisma.upload.findMany({
+    where: { key: { in: keys }, ownerId },
+    select: { key: true },
+  });
 }
 
 // Fetches all uploads owned by a user, ordered newest first.

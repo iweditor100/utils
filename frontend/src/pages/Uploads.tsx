@@ -344,16 +344,14 @@ const UploadsPage: React.FC = () => {
     
     // Zip feedback toasts
     useEffect(() => {
-        if (zipPhase === "polling" && workerStatus === "PROCESSING") {
-            // no toast — button label already shows progress
-        } else if (zipPhase === "done") {
-            toast.success("ZIP downloaded!");
+        if (zipPhase === "done") {
+            toast.success("ZIP Created!");
             resetZip();
         } else if (zipPhase === "failed" && zipError) {
             toast.error(zipError);
             resetZip();
         }
-    }, [zipPhase, workerStatus, zipError, resetZip]);
+    }, [zipPhase, zipError, resetZip]);
 
 
     return (
@@ -404,18 +402,16 @@ const UploadsPage: React.FC = () => {
                                     .map((u) => u.key);
                                 triggerZip(keys);
                             }}
-                            disabled={zipPhase === "queuing" || zipPhase === "polling"}
+                            disabled={zipPhase === "queuing" || zipPhase === "waiting"}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            {zipPhase === "queuing" || zipPhase === "polling" ? (
+                            {zipPhase === "queuing" || zipPhase === "waiting" ? (
                                 <>
                                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                                     </svg>
-                                    {workerStatus === "PROCESSING"
-                                        ? `Zipping… ${zipProgress}%`
-                                        : "Queuing…"}
+                                    {zipPhase === "queuing" ? "Queuing…" : "Zipping…"}
                                 </>
                             ) : (
                                 <>
@@ -430,6 +426,32 @@ const UploadsPage: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {/* ZIP progress bar — visible during queuing and worker processing */}
+                {(zipPhase === "queuing" || zipPhase === "waiting") && (
+                    <div className="mt-4 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500 dark:text-gray-400">
+                                {zipPhase === "queuing"
+                                    ? "Queuing job…"
+                                    : workerStatus === "PROCESSING"
+                                    ? "Building ZIP…"
+                                    : "Waiting for worker…"}
+                            </span>
+                            {zipPhase === "waiting" && workerStatus === "PROCESSING" && (
+                                <span className="font-semibold text-brand-600 dark:text-brand-400">
+                                    {zipProgress}%
+                                </span>
+                            )}
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-brand-500 rounded-full transition-all duration-300 ease-out"
+                                style={{ width: `${zipPhase === "queuing" ? 0 : zipProgress}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* Select-all row */}
                 {uploads.length > 0 && (

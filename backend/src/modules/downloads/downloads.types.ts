@@ -1,4 +1,5 @@
-export interface CreateZipJobPayload { 
+export interface CreateZipJobPayload {
     jobId: string;
+    userId: string;
     fileKeys: string[];
 }

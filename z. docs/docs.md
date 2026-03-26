@@ -494,6 +494,165 @@ The backend now knows that a valid key object exists in the R2 object.
 
    ### Downloads
 
+   there are two architecture for downloading something: 
+   1. download raw,
+   2. download zip(worker comes in play)
+
+
+   #### Download Raw: 
+   ```
+   User hits download.
+
+   Frontend(phase 1 of 2): 
+   useDownloadFile is a custom hook that exists, this gives us options like: download, progress, the status, and cancel option. 
+
+      download: this is a callback function which takes in the fileId and the fileName, and fetches the download Url for us , bcs we gave it the fileId , using getDownloadUrl it finds the url for us, getDownloadUrl is an api query to call the backend. 
+
+      getDownloadURL: it is a query api call, takes in only the fileId and hits the url: /uploads/:fileId/url. GET
+
+   
+   Backend: (/GET)
+   getdownloadUrlController: 
+      this safely parses the params first, bcs there we are passing the fileId,
+
+   we get the fileId from the params and then we get the userId from the request headers. 
+
+   const res = await getDownloadUrl(fileId, userId); //we can also not pass the userId , this is upto us, the backend currently requires the userId being present there and fileId is obvious. 
+
+   getDownloadUrl this is a service: 
+   this does this: it finds the upload(in the upload table in the db if upload for that fileId is present or not);
+   this also checks if that key is present or not, here is the strucutre of the upload: 
+   { 
+      id, 
+      ownerId, 
+      key, 
+      mimeType, 
+      size, 
+      category, 
+      createdAt
+   }
+   on this layer only we can see many things like if we have to downloadUrl to this user or not, bcs he isn't the owner of this file / key, 
+   once the upload is found, we get its downlaod url by the presignGetObject function inside the storage.service: 
+
+   presignGetObject(key) : this takes in key, 
+
+   presignGetObject(key) {
+      aws-s3-r2 boiler plate. 
+      
+      downloadUrl = (r2 boiler plate + custom expiresIr);
+      return downloadUrl;
+   }
+
+
+
+
+   Frontend (phase 2 of 2) : 
+   still inside the download function (this is the callback function)
+   const res = await getDownloadUrl(fileId);
+   const url = res.data.url;
+   we have the url with us, this is the download url
+
+   looks something like this: 
+   https://iwcrm.d66f7fe1c45c6c0147798dfdefa40dc5.r2.cloudflarestorage.com/testing/17178d02-2935-4cf0-8613-485b95978d4f/a9d090bf-feea-4a14-8d93-b14f40f05af1/testing/original.CR2?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=a3f6dccd79b0b7384920f20ec62f7acc%2F20260324%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20260324T123151Z&X-Amz-Expires=900&X-Amz-Signature=db47ab428d08858aed3b11758bea621b2d8134c4f082fd3906c00acbb30d5571&X-Amz-SignedHeaders=host&x-id=GetObject
+
+
+
+   the above is the url, we which can be hit raw also, meaning we can just hit it and still the download will being. 
+   and the download begins. directly inside the browser. 
+   
+   ```
+
+
+
+   QUESTIONS:
+   ``` what if the presign url is exposed? the upload and the download. ```
+
+
+#### Download Zip: 
+
+```
+   Frontend: 
+   1. user selects images , as keys from the frontend. 
+   2. we hit the download as zip. 
+
+   hook used: useZipDownload. 
+   when we hit the button: download as zip, we are calling the function: triggerZip, which the hook useZipDownload
+
+   triggerZip is also a callback function. 
+   it takes in the fileKeys and creates zip job. 
+   we have two types of phase, one is quueering and other is polling. 
+   here we are having the res: 
+   const res = await createZipJob({ fileKeys });
+
+   the createZipJob is an api endpoint hitting: 
+   /downloads/zip, POST req, data: body, 
+
+
+   Backend: 
+
+   download.routes.ts: 
+   POST: /zip: 
+   createZipController: this controller expects the fileKeys in the req.body in an array format, 
+
+   it creates a job for all the keys: 
+   const job = await createDownloadJob({ userId, fileKeys });
+
+   this controller doesn't validate anything just puts the keys inside the createDownloadJob.
+
+
+   createDownloadJob: this is a service: 
+   in the db it creates a downloadjob named table row: 
+   const job = await prisma.downloadJob.create({ data: {user Id, fileIds, status: "QUEUED", }})
+
+   downloadJob: {
+      id, 
+      userId, //of the requestor 
+      status, //the status of the download
+
+      fileIds, //list of all the files that will reside in the zip
+
+      zipKey, they key which will reside in the r2 object storage
+      progress,
+      error,
+      createdAt,
+      expiresAt,
+   }
+
+   and the createDownloadJob also does this: adds the inside the zipQueue, what does it add? 
+   {
+      jobId, userId, fileKeys
+   }
+
+   the service of the zipdownload returns the job that was created inside the db. 
+
+
+   WORKER: 
+   what is a worker? 
+   what is the worker doing? 
+   what is the need of a queue? 
+   
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+```
+   socket io 
+   what is the need of socket io? 
+   -> big picture, there to push real time progres updates to the browser, while a zip file is being built in the background ( by a BullMQ worker )
+
+   
+```
+
 
 flow: 
 
@@ -563,7 +722,7 @@ Ask for presign from the backend
    ↓
 Backend validates the image type and believes the frontend
    ↓
-Backend returns { key, uploadURL }
+Backend returns { key, uploadURL } 
    ↓
 Frontend Uploads to R2 storage
 (the uploadURL works as a validation token for uploading object to R2 with a TTL, and key is where the upload will happen)

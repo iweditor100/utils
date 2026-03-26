@@ -10,7 +10,7 @@ import uploadsRouter from "../modules/uploads/uploads.routes";
 import calendarRoutes from "../modules/calendar/calendar.routes";
 import googleCalendarRoutes from "../modules/google/googleCalendar.routes";
 import serviceAreaRoutes from "../modules/service-areas/service-area.routes";
-import downloadsRouter from "../modules/downloads/routes/downlaods.routes";
+import downloadsRouter from "../modules/downloads/routes/downloads.routes";
 
 const router = Router();
 

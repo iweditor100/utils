@@ -25,7 +25,7 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
     const key =
         input.category === "avatar"
             ? `${prefix}/${input.userId}/original.${ext}`
-            : `${prefix}/${input.userId}/${crypto.randomUUID()}/testing/original.${ext}`;
+            : `${prefix}/${input.userId}/${crypto.randomUUID()}/original.${ext}`;
 
     const { uploadUrl } = await presignPutObject({
         key,
@@ -38,8 +38,6 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
 }
 
 export async function getDownloadUrl(fileId: string, userId: string) {
-
-    console.log("getDownloadURL service called with file ID file: ", fileId, "userId: ",userId);
     const upload = await findUploadById(fileId);
 
     if (!upload) {
