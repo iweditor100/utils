@@ -1,4 +1,7 @@
 import nodemailer from "nodemailer";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("email");
 
 const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
@@ -62,10 +65,9 @@ export const emailService = {
           </div>
         `,
       });
-      console.log(`[email] zip-ready sent to ${to} — messageId: ${info.messageId}`);
+      log.info({ to, messageId: info.messageId, jobId }, "ZIP ready email sent");
     } catch (e: any) {
-      console.error(`[email] zip-ready FAILED to ${to}:`, e?.message);
+      log.error({ to, jobId, err: e?.message }, "ZIP ready email failed");
     }
   },
 };
-

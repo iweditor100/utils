@@ -5,6 +5,9 @@ import { sendError, sendSuccess } from "../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../constants";
 import { SessionService } from "../auth/services/session.service";
 import { UploadCategory } from "./uploads.constants";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("uploads");
 
 const INVALID_INPUT_CODE = 121212;
 const UPLOAD_PRESIGNED_CODE = 121213;
@@ -30,7 +33,7 @@ export async function presignUploadController(req: Request, res: Response) {
             category: parsed.data.category as UploadCategory,
         });
 
-        console.log("Upload presigned: ", result);
+        log.info({ userId, category: parsed.data.category }, "Upload presigned");
 
         return sendSuccess(
             res,
@@ -39,6 +42,7 @@ export async function presignUploadController(req: Request, res: Response) {
             HTTP_STATUS.OK
         );
     } catch (error) {
+        log.error({ err: error }, "Presign upload failed");
         return sendError(
             res,
             INVALID_INPUT_CODE,

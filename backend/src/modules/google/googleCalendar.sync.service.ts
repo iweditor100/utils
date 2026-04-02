@@ -6,6 +6,10 @@ import { EventCategory, SyncSource } from "@prisma/client";
 import { getIO } from "../../infra/socket/socket";
 import { env } from "../../config/env";
 import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
+import crypto from "crypto";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("google-sync");
 
 
 const prisma = getPrisma();
@@ -108,7 +112,7 @@ export class GoogleCalendarSyncService {
             }
 
         } catch (error) {
-            console.error(`Failed to push event ${eventId} to Google`, error);
+            log.error({ err: error, eventId }, "Failed to push event to Google");
         }
     }
 
@@ -133,7 +137,7 @@ export class GoogleCalendarSyncService {
 
         } catch (error: any) {
             if (error.code !== 404 && error.code !== 410) {
-                console.error(`Failed to delete event ${googleEventId} from Google`, error);
+                log.error({ err: error, googleEventId, userId }, "Failed to delete event from Google");
             }
         }
     }
@@ -188,7 +192,7 @@ export class GoogleCalendarSyncService {
             io.to(`user:${userId}`).emit("calendar:updated");
 
         } catch (error: any) {
-            console.error("Full initial sync failed", error);
+            log.error({ err: error, userId }, "Full initial sync failed");
             throw error;
         }
     }
@@ -255,14 +259,14 @@ export class GoogleCalendarSyncService {
         } catch (error: any) {
             if (error.code === 410) {
                 // Sync token invalid, do full sync
-                console.log("Sync token expired, invalidating and performing full sync");
+                log.warn({ userId }, "Sync token expired, invalidating and performing full sync");
                 await prisma.googleCalendarIntegration.update({
                     where: { userId },
                     data: { syncToken: null }
                 });
                 return this.fullInitialSync(userId);
             }
-            console.error("Pull remote changes failed", error);
+            log.error({ err: error, userId }, "Pull remote changes failed");
         }
     }
 
@@ -380,10 +384,14 @@ export class GoogleCalendarSyncService {
         const channelId = uuidv4();
         const webhookUrl = env.GOOGLE_WEBHOOK_URL;
 
-
         if (!webhookUrl) {
             throw new Error("GOOGLE_WEBHOOK_URL is not defined");
         }
+
+        // Generate a cryptographically secure random token.
+        // Send raw token to Google; store only the SHA-256 hash in DB.
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
 
         const res = await calendar.events.watch({
             calendarId: 'primary',
@@ -391,11 +399,9 @@ export class GoogleCalendarSyncService {
                 id: channelId,
                 type: 'web_hook',
                 address: webhookUrl,
-                // Token parameter can be used to pass userId securely back
-                token: userId,
+                token: rawToken,
             }
         });
-
 
         const resourceId = res.data.resourceId;
         const expiration = res.data.expiration ? BigInt(res.data.expiration) : undefined;
@@ -405,7 +411,8 @@ export class GoogleCalendarSyncService {
             data: {
                 webhookChannelId: channelId,
                 webhookResourceId: resourceId,
-                webhookExpiration: expiration
+                webhookExpiration: expiration,
+                webhookTokenHash: tokenHash,
             }
         });
     }
@@ -428,7 +435,7 @@ export class GoogleCalendarSyncService {
                 }
             });
         } catch (error) {
-            console.warn("Failed to stop channel (might be already expired)", error);
+            log.warn({ err: error, userId }, "Failed to stop watch channel (may be already expired)");
         }
 
         await prisma.googleCalendarIntegration.update({

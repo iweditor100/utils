@@ -6,6 +6,9 @@ import { audit } from "../../../services/audit/audit.service";
 import { SessionService } from "../services/session.service";
 import { sendSuccess, sendError } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 
 const changePasswordSchema = z.object({
     currentPassword: z.string().min(8),
@@ -72,9 +75,10 @@ export async function changePasswordController(req: Request, res: Response) {
         )
     }
 
-    // valid current password: 
+    // valid current password:
     const valid = await bcrypt.compare(currentPassword, emailIdentity.passwordHash!);
     if (!valid) {
+        log.warn({ userId }, "Change password failed: incorrect current password");
         return sendError(
             res,
             AUTH_CODES.INVALID_CREDENTIALS,
@@ -112,5 +116,6 @@ export async function changePasswordController(req: Request, res: Response) {
     // Audit
     // await audit.logAudit({ userId, event: "CHANGE_PASSWORD" });
 
+    log.info({ userId }, "Password changed, all sessions revoked");
     return sendSuccess(res, AUTH_CODES.CHANGE_PASSWORD_SUCCESS, {})
 }

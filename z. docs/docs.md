@@ -564,10 +564,6 @@ The backend now knows that a valid key object exists in the R2 object.
 
 
 
-   QUESTIONS:
-   ``` what if the presign url is exposed? the upload and the download. ```
-
-
 #### Download Zip: 
 
 ```
@@ -674,7 +670,41 @@ How is the download working?
 
   ## Frontend Features
 
-  ### <feature name>
+  ### Drawing Tool. 
+  This is an mvp which gives the liberty to user to draw on the images, 
+  It takes a jpg and gives the user a feature to draw on them, (used for drone shots, telling what area a land covers) and more
+
+
+
+  #### Backend. 
+  - routes : /POST: saveAnnotation and /GET: annotation.   
+  - schema : Zod schema , what a valid annotations' data would look like.   
+  - controller: HTTP layer
+  - service: Business logic, authorization, rules. 
+  - repository: prisma queries. 
+  - error: custom errors. 
+  - types: TS types. 
+
+  ##### Schema: 
+  This is not normal z validation, we are using a discriminated union, This is the key concept here, what is this doing? 
+  The discriminated union is like switch case to use the correct type of validation for the different type which we have used, we have different type of incoming annotations: 
+  1. rect: x, y, width, height, strokeWidth
+  2. pin: x, y, label
+  3. freedraw: points[path, refW, refH, left, top], strokeWidth, 
+  4. circle: x, y, radius(rx, ry)(should be non-negative)
+  5. line: x1, y1, x2, y2
+  6. text: x, y, text, fontSize
+  7. polygon: points[], strokeWidth
+
+  all of them have: color
+
+  saveAnnotationSchema = uploadId, and data(should be max 500 characters), 
+
+
+  
+
+  #### Frontend. 
+  <will get to this later>
 
 
   ---
@@ -835,3 +865,29 @@ An ImageWorker that is listening to the imageQueue consumes it and performs the 
 
   - Jobs
   - COULD BE MORE
+
+
+
+  
+
+   ## TODO / QUESTIONS:
+   ``` what if the presign url is exposed? the upload and the download. ```
+   
+   ``` disposable emails ```
+
+   ``` LOGGER ```
+
+   ``` archive deletes from the r2 ```
+
+   ``` check for transaction  ```
+
+   ``` LOGO WATERMARK on the image```
+
+   ``` pin maker and selecting region```
+
+
+   ``` when i logout of one window in the other window I am still able to access the system```
+
+
+
+

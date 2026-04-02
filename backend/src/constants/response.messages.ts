@@ -3,6 +3,7 @@ import { USER_CODES } from "./user.codes";
 import { UPLOAD_CODES } from "./uploads.codes";
 import { CALENDAR_CODES } from "./calendar.codes";
 import { DOWNLOAD_CODES } from "./download.codes";
+import { ANNOTATION_CODES } from "./annotations.codes";
 
 export const RESPONSE_MESSAGES: Record<number, string> = {
     // -------- SUCCESS --------
@@ -54,6 +55,16 @@ export const RESPONSE_MESSAGES: Record<number, string> = {
     [DOWNLOAD_CODES.DOWNLOAD_QUEUED]:        "Download job queued",
     [DOWNLOAD_CODES.DOWNLOAD_FAILED]:        "Download failed",
     [DOWNLOAD_CODES.DOWNLOAD_JOB_NOT_FOUND]: "Download job not found",
+
+
+    // -------- ANNOTATIONS --------
+    [ANNOTATION_CODES.ANNOTATION_SAVED]: "Annotation saved",
+    [ANNOTATION_CODES.ANNOTATION_FETCHED]: "Annotation fetched",
+    [ANNOTATION_CODES.ANNOTATION_INVALID_INPUT]: "Invalid annotation data", 
+    [ANNOTATION_CODES.ANNOTATION_ACCESS_DENIED]: "Access Denied",
+    [ANNOTATION_CODES.ANNOTATION_NOT_FOUND]: "Image not found",
+    [ANNOTATION_CODES.ANNOTATION_PAYLOAD_TOO_LARGE]: "Too many annotation objets",
+    [ANNOTATION_CODES.ANNOTATION_INTERNAL_ERROR]: "Annotation service error",
 
     // -------- SERVER ERRORS --------
     [AUTH_CODES.AUTH_INTERNAL_ERROR]: "Auth internal error",

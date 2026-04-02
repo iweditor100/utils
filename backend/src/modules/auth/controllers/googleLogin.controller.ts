@@ -5,6 +5,9 @@ import { verifyGoogleIdToken } from "../services/googleOAuth.service";
 import { SessionService } from "../services/session.service";
 import { signAccessToken } from "../utils/accessToken";
 import { audit } from "../../../services/audit/audit.service";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 
 export async function googleLoginController(req: Request, res: Response) {
   // Validate input
@@ -77,6 +80,7 @@ export async function googleLoginController(req: Request, res: Response) {
     path: "/auth"
   });
   await audit.logLogin(user.id, sessionId, req.ip, req.get("User-Agent") || "", { provider: "GOOGLE", userCreated, justLinkedGoogleIdentity });
+  log.info({ userId: user.id, sessionId, userCreated, justLinkedGoogleIdentity }, "Google login successful");
   const { id, name, email, picture, status, emailVerifiedAt } = user;
   res.json({
     accessToken,

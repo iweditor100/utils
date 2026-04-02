@@ -3,6 +3,9 @@ import { SessionService } from "../services/session.service";
 import { signAccessToken } from "../utils/accessToken";
 import { sendError, sendSuccess } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 
 export async function refreshController(req: Request, res: Response) {
   const refreshTokenPlain = req.cookies?.refresh_token;
@@ -30,6 +33,7 @@ export async function refreshController(req: Request, res: Response) {
       expires: expiresAt,
       path: "/auth"
     });
+    log.info({ userId, sessionId }, "Token rotated");
     return sendSuccess(
       res,
       AUTH_CODES.LOGIN_SUCCESS,
@@ -39,6 +43,7 @@ export async function refreshController(req: Request, res: Response) {
   } catch (err) {
     // Always clear cookie on failure, to prevent re-use
     res.clearCookie("refresh_token", { path: "/auth" });
+    log.warn({ err }, "Token refresh failed");
     return sendError(
       res,
       AUTH_CODES.UNAUTHORIZED,
@@ -47,4 +52,3 @@ export async function refreshController(req: Request, res: Response) {
     )
   }
 }
-

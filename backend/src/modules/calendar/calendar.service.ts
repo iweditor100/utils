@@ -1,5 +1,8 @@
 import { getPrisma } from "../../prisma/client";
 import { CalendarEventCreateData } from "./calendar.types";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("calendar");
 
 const prisma = getPrisma();
 
@@ -27,15 +30,11 @@ export class CalendarService {
         });
 
 
-        console.log("created event: ", event);
-
+        log.info({ userId, eventId: event.id }, "Calendar event created");
 
         // Sync to Google if enabled (fires socket itself when done)
-        console.log("checking if google sync is enabled");
         const { GoogleCalendarSyncService } = await import("../google/googleCalendar.sync.service");
         await GoogleCalendarSyncService.pushLocalEvent(event.id);
-
-        console.log("checked if google sync is enabled");
 
         // Always emit so the UI updates even when Google sync is off
         const { getIO } = await import("../../infra/socket/socket");

@@ -1,14 +1,17 @@
 import Redis from "ioredis";
+import { createChildLogger } from "../logger";
+
+const log = createChildLogger("redis");
 
 /**
  * Redis client configuration for production use.
- * 
+ *
  * Key settings:
  * - enableOfflineQueue: false - Prevents queuing commands when Redis is down.
  *   Commands fail fast instead of blocking, ensuring the app never waits on Redis.
  * - maxRetriesPerRequest: 1 - Low retry count to avoid blocking requests.
  *   Redis is best-effort only; failures must not impact application flow.
- * 
+ *
  * Philosophy: Redis is a performance optimization cache, never a hard dependency.
  * If Redis is unavailable, the app must continue working via PostgreSQL.
  */
@@ -24,10 +27,10 @@ export const redis = new Redis({
 
 
 redis.on("connect", () => {
-    console.log("Redis Connected");
-})
+  log.info("Redis connected");
+});
 
 redis.on("error", (err) => {
-    // NEVER CRASH THE APP IF REDIS IS NOT AVAILABLE. 
-    console.error("Redis error: ", err.message);
-})
+  // NEVER CRASH THE APP IF REDIS IS NOT AVAILABLE.
+  log.error({ err: err.message }, "Redis error");
+});

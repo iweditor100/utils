@@ -11,6 +11,7 @@ import calendarRoutes from "../modules/calendar/calendar.routes";
 import googleCalendarRoutes from "../modules/google/googleCalendar.routes";
 import serviceAreaRoutes from "../modules/service-areas/service-area.routes";
 import downloadsRouter from "../modules/downloads/routes/downloads.routes";
+import annotationsRoutes from "../modules/annotations/annotations.routes";
 
 const router = Router();
 
@@ -30,5 +31,7 @@ router.use("/google", googleCalendarRoutes)
 router.use("/service-areas", serviceAreaRoutes);
 
 router.use("/downloads", downloadsRouter);
+
+router.use("/annotations", annotationsRoutes);
 
 export default router;

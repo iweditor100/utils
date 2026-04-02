@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import {
@@ -198,6 +199,7 @@ function UploadRow({
     onToggle: () => void;
     onPreview: () => void;
 }) {
+    const navigate = useNavigate();
     const { download, status: dlStatus } = useDownloadFile();
     const isDownloading = dlStatus === "fetching-url" || dlStatus === "downloading";
     const fileName = extractFileName(upload.key);
@@ -246,6 +248,25 @@ function UploadRow({
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                </button>
+            )}
+
+            {/* Annotate button — all images, JPG-only enforcement on click */}
+            {upload.mimeType.startsWith("image/") && (
+                <button
+                    onClick={() => {
+                        if (upload.mimeType !== "image/jpeg") {
+                            toast.error("Only JPG/JPEG images can be annotated.");
+                            return;
+                        }
+                        navigate(`/uploads/${upload.id}/annotate`);
+                    }}
+                    className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 dark:hover:text-violet-400 transition-colors"
+                    title="Annotate"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                 </button>
             )}
@@ -543,6 +564,7 @@ const UploadsPage: React.FC = () => {
                     onClose={() => setPreviewUpload(null)}
                 />
             )}
+
         </>
     );
 };

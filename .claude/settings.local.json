@@ -10,7 +10,9 @@
       "Bash(npx tsc:*)",
       "Bash(xargs grep:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(grep -r \"SMTP_\\\\|EMAIL_\" /c/work/yogarth/projects/iwutils/cursor/backend/src --include=*.ts --include=*.js)"
+      "Bash(grep -r \"SMTP_\\\\|EMAIL_\" /c/work/yogarth/projects/iwutils/cursor/backend/src --include=*.ts --include=*.js)",
+      "Bash(find /c/work/yogarth/projects/iwutils/cursor/backend/src -type f \\\\\\(-name *.ts -o -name *.js \\\\\\))",
+      "Bash(node:*)"
     ]
   }
 }

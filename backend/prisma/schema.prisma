@@ -221,6 +221,7 @@ model GoogleCalendarIntegration {
   webhookChannelId  String?
   webhookExpiration BigInt?
   webhookResourceId String?
+  webhookTokenHash  String?
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("google_calendar_integrations")
@@ -271,13 +272,15 @@ model Upload {
   size      Int
   category  String
   createdAt DateTime @default(now())
+  
+  annotation Annotation?
 
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  
 
   @@index([ownerId])
   @@map("uploads")
 }
-
 
 
 
@@ -306,6 +309,21 @@ enum DownloadStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+
+model Annotation {
+  id          String   @id @default(uuid())
+  uploadId    String   @unique
+  userId      String
+  data        Json
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  upload      Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@map("annotations")
 }
 
 

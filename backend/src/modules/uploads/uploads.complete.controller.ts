@@ -4,6 +4,9 @@ import { sendError, sendSuccess } from "../../utils";
 import { HTTP_STATUS, UPLOAD_CODES } from "../../constants";
 import { imageQueue } from "./image.queue";
 import { createUpload } from "./uploads.repository";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("uploads");
 
 const completeSchema = z.object({
     key:      z.string().min(1),
@@ -52,12 +55,13 @@ export async function completeUploadController(req: Request, res: Response) {
                 }
             );
         } catch (queueError) {
-            console.error("[COMPLETE] Failed to enqueue image job:", queueError);
+            log.error({ err: queueError, key, userId }, "Failed to enqueue image processing job");
         }
 
+        log.info({ userId, key, category, mimeType, size }, "Upload completed");
         return sendSuccess(res, UPLOAD_CODES.UPLOAD_COMPLETE_SUCCESS, { id: upload.id }, HTTP_STATUS.OK);
     } catch (error) {
-        console.error("[COMPLETE] Unexpected error:", error);
+        log.error({ err: error }, "Complete upload failed");
         return sendError(res, UPLOAD_CODES.UPLOAD_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     }
 }

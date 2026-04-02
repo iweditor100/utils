@@ -7,6 +7,9 @@ import bcrypt from "bcrypt";
 import { audit } from "../../../services/audit/audit.service";
 import { sendError, sendSuccess } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 const resetSchema = z.object({
   token: z.string(),
   newPassword: z.string().min(8)
@@ -72,6 +75,7 @@ export async function resetPasswordController(req: Request, res: Response) {
   ]);
   await SessionService.revokeAllSessions(record.userId);
   await audit.logAudit({ userId: record.userId, event: "RESET_PASSWORD" });
+  log.info({ userId: record.userId }, "Password reset successful, all sessions revoked");
   return sendSuccess(
     res,
     AUTH_CODES.PASSWORD_RESET_SUCCESS,

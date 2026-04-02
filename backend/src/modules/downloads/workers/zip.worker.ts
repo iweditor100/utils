@@ -11,6 +11,9 @@ import { getPrisma } from "../../../prisma/client";
 import { env } from "../../../config/env";
 import type { CreateZipJobPayload } from "../downloads.types";
 import { emailService } from "../../auth/services/email.service";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("zip-worker");
 
 const FETCH_CONCURRENCY = 4;
 
@@ -45,11 +48,11 @@ async function fetchFilesFromR2(keys: string[]): Promise<FetchedFile[]> {
                         filename,
                     };
                 } else {
-                    console.warn(`[zip] empty body for key: ${key}`);
+                    log.warn({ key }, "Empty body for R2 object");
                 }
             } catch (err: any) {
                 if (err?.name === "NoSuchKey" || err?.Code === "NoSuchKey") {
-                    console.warn(`[zip] file not found, skipping: ${key}`);
+                    log.warn({ key }, "File not found in R2, skipping");
                 } else {
                     throw err;
                 }
@@ -71,7 +74,7 @@ async function safeUpdateJob(id: string, data: Record<string, unknown>) {
         await prisma.downloadJob.update({ where: { id }, data });
     } catch (err: any) {
         if (err?.code === "P2025") {
-            console.warn(`[zip] no DB record for jobId=${id}, skipping status update`);
+            log.warn({ jobId: id }, "No DB record for job, skipping status update");
             return;
         }
         throw err;
@@ -89,7 +92,7 @@ export const createZipWorker = () => {
         "zip-jobs",
         async (job) => {
             const { jobId, userId, fileKeys } = job.data;
-            console.log(`[zip] starting job=${jobId} files=${fileKeys.length}`);
+            log.info({ jobId, userId, fileCount: fileKeys.length }, "Zip job started");
 
             await safeUpdateJob(jobId, { status: "PROCESSING" });
 
@@ -106,7 +109,7 @@ export const createZipWorker = () => {
 
                 archive.on("warning", (err) => {
                     if (err.code !== "ENOENT") throw err;
-                    console.warn("[zip] archive warning:", err.message);
+                    log.warn({ err: err.message, jobId }, "Archive warning");
                 });
 
                 archive.on("error", (err) => {
@@ -124,7 +127,6 @@ export const createZipWorker = () => {
                     if (!file) continue; // was skipped (NoSuchKey / empty body)
 
                     archive.append(file.body, { name: file.filename });
-                    console.log(`[zip] appended: ${file.filename}`);
 
                     const progress = Math.round((processed / total) * 100);
                     await safeUpdateJob(jobId, { progress });
@@ -143,7 +145,7 @@ export const createZipWorker = () => {
                 });
 
                 await publishDownloadEvent({ type: "complete", userId, jobId });
-                console.log(`[zip] completed job=${jobId} key=${zipKey}`);
+                log.info({ jobId, zipKey }, "Zip job completed");
 
                 // Send email notification — fire and forget, never blocks the worker.
                 // Socket event above already handles users with the tab open.
@@ -155,13 +157,12 @@ export const createZipWorker = () => {
                         select: { email: true },
                     });
                     if (user?.email) {
-                        console.log(`[zip] sending email to ${user.email} for job=${jobId}`);
+                        log.info({ userId, jobId }, "Dispatching zip ready email");
                         emailService.sendZipReadyEmail({ to: user.email, jobId });
-                        console.log(`[zip] email dispatched to ${user.email}`);
                     }
                 }
             } catch (err: any) {
-                console.error(`[zip] failed job=${jobId}:`, err);
+                log.error({ err, jobId, userId }, "Zip job failed");
                 await safeUpdateJob(jobId, {
                     status: "FAILED",
                     error: err?.message ?? "Unknown error",
@@ -179,11 +180,11 @@ export const createZipWorker = () => {
     );
 
     worker.on("completed", (job) => {
-        console.log("[zip] job completed:", job.id);
+        log.info({ jobId: job.id }, "Zip worker: job completed");
     });
 
     worker.on("failed", (job, error) => {
-        console.error("[zip] job failed:", job?.id, error.message);
+        log.error({ jobId: job?.id, err: error.message }, "Zip worker: job failed");
     });
 
     return worker;

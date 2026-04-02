@@ -5,6 +5,9 @@ import { EventCategory } from "@prisma/client";
 import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
 import { redis } from "../../infra/redis";
 import crypto from "crypto";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("google-calendar");
 
 const prisma = getPrisma();
 
@@ -38,7 +41,7 @@ export class GoogleCalendarService {
         const { tokens } = await client.getToken(code);
 
         if (!tokens.refresh_token) {
-            console.warn("No refresh token received during Google Auth callback");
+            log.warn({ userId }, "No refresh token received during Google Auth callback");
         }
 
         client.setCredentials(tokens);
@@ -86,7 +89,7 @@ export class GoogleCalendarService {
         // Listen for tokens to update DB
         client.on("tokens", async (tokens) => {
             if (tokens.refresh_token) {
-                console.log("New refresh token received");
+                log.info({ userId }, "New Google refresh token received");
             }
             await prisma.googleCalendarIntegration.update({
                 where: { userId },
@@ -232,7 +235,7 @@ export class GoogleCalendarService {
                     });
                 }
             } catch (error) {
-                console.error(`Failed to export event ${event.id}`, error);
+                log.error({ err: error, eventId: event.id, userId }, "Failed to export event to Google");
                 // Continue to next event
             }
         }
@@ -257,7 +260,7 @@ export class GoogleCalendarService {
                 const client = this.createOAuthClient();
                 await client.revokeToken(integration.accessToken);
             } catch (err) {
-                console.warn("Failed to revoke Google token (may be already expired): ", err);
+                log.warn({ err, userId }, "Failed to revoke Google token (may be already expired)");
             }
         }
 

@@ -4,12 +4,12 @@ import type { RootState } from "../app/store";
 import { socket } from "../lib/socket";
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
-    const user = useSelector((state: RootState) => state.auth.user);
     const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
     useEffect(() => {
-        if (isAuthenticated && user?.id) {
-            socket.auth = { userId: user.id };
+        if (isAuthenticated && accessToken) {
+            socket.auth = { token: accessToken };
             socket.connect();
         } else {
             socket.disconnect();
@@ -18,7 +18,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         return () => {
             socket.disconnect();
         };
-    }, [isAuthenticated, user?.id]);
+    }, [isAuthenticated, accessToken]);
 
     return <>{children}</>;
 }

@@ -2,6 +2,9 @@ import IORedis from "ioredis";
 import { env } from "../../config/env";
 import { getIO } from "./socket";
 import { DOWNLOAD_EVENTS_CHANNEL, type DownloadEvent } from "./download.publisher";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("socket-relay");
 
 export function startSocketRelay() {
     const subscriber = new IORedis({
@@ -11,8 +14,8 @@ export function startSocketRelay() {
     });
 
     subscriber.subscribe(DOWNLOAD_EVENTS_CHANNEL, (err) => {
-        if (err) console.error("[socket-relay] failed to subscribe:", err);
-        else console.log("[socket-relay] subscribed to", DOWNLOAD_EVENTS_CHANNEL);
+        if (err) log.error({ err }, "Failed to subscribe to download events channel");
+        else log.info({ channel: DOWNLOAD_EVENTS_CHANNEL }, "Subscribed to download events channel");
     });
 
     subscriber.on("message", (_channel, message) => {
@@ -31,7 +34,7 @@ export function startSocketRelay() {
                 });
             }
         } catch (err) {
-            console.error("[socket-relay] failed to handle message:", err);
+            log.error({ err }, "Failed to handle socket relay message");
         }
     });
 

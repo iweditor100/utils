@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "worker": "tsx watch src/workers/server.worker.ts"
+    "worker": "tsx watch src/workers/server.worker.ts",
+    "dev:socket": "tsx scripts/socket-listener.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.969.0",
@@ -31,6 +32,7 @@
     "nodemailer": "^6.9.16",
     "pino": "^8.21.0",
     "pino-pretty": "^11.3.0",
+    "pino-roll": "^4.0.0",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.0",
@@ -46,6 +48,7 @@
     "@types/node": "^20.8.10",
     "@types/nodemailer": "^7.0.4",
     "prisma": "^5.0.0",
+    "socket.io-client": "^4.8.3",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.21.0",

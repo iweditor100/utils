@@ -6,6 +6,9 @@ import { emailService } from "../services/email.service";
 import { generateEmailToken } from "../utils/emailTokens";
 import { sendSuccess } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 
 
 const forgotSchema = z.object({ email: z.string().email() });
@@ -35,6 +38,7 @@ export async function forgotPasswordController(req: Request, res: Response) {
     });
     await emailService.sendResetPasswordEmail({ to: email, token });
     await audit.logAudit({ userId: user.id, event: "FORGOT_PASSWORD" });
+    log.info({ userId: user.id }, "Password reset email dispatched");
   } else {
     await new Promise(r => setTimeout(r, 400));
   }

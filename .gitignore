@@ -43,6 +43,9 @@ backend/*.tsbuildinfo
 # env of backend: 
 backend/.env
 
+# Logs: 
+backend/logs
+
 # env of client: 
 client/.env 
 ############################################

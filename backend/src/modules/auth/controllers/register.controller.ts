@@ -8,6 +8,9 @@ import { registerSchema } from "../validators/auth.validators";
 import { audit } from "../../../services/audit/audit.service";
 import { sendError, sendSuccess } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("auth");
 
 export async function registerController(req: Request, res: Response) {
   const parse = registerSchema.safeParse(req.body);
@@ -39,7 +42,7 @@ export async function registerController(req: Request, res: Response) {
 
 
         const { token, hash, expiresAt } = generateEmailToken({
-          email, 
+          email,
           purpose: "verify"
         });
 
@@ -48,6 +51,7 @@ export async function registerController(req: Request, res: Response) {
         });
 
         await emailService.sendVerificationEmail({ to: email, token });
+        log.info({ userId: existing.id }, "Re-sent verification email to unverified existing user");
       }
 
 
@@ -85,6 +89,7 @@ export async function registerController(req: Request, res: Response) {
       data: { userId: user!.id, tokenHash: hash, expiresAt }
     });
     await emailService.sendVerificationEmail({ to: email, token });
+    log.info({ userId: user!.id, email }, "New user registered");
     return sendSuccess(
       res,
       AUTH_CODES.USER_REGISTERED,
@@ -92,6 +97,7 @@ export async function registerController(req: Request, res: Response) {
     )
   } catch (err) {
     // Intentionally uniform response (avoid account enumeration) — but log internally
+    log.error({ err }, "Registration error");
     audit.logAudit({ event: "REGISTER", userId: undefined, metadata: { error: String(err) } });
     return sendError(
       res,

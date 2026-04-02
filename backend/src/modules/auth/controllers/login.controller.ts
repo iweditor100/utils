@@ -2,15 +2,14 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 
-
 import { getPrisma } from "../../../prisma/client";
 import { signAccessToken } from "../utils/accessToken";
 import { SessionService } from "../services/session.service";
 import { sendSuccess, sendError } from "../../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../../constants";
-import { error } from "console";
+import { createChildLogger } from "../../../logger";
 
-
+const log = createChildLogger("auth");
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -41,15 +40,16 @@ export async function loginController(req: Request, res: Response) {
   );
   // Check status and existence
   if (!user || !identity || !identity.passwordHash || !user.emailVerifiedAt || user.status !== "ACTIVE") {
+    log.warn({ email }, "Login failed: user not found, unverified, or inactive");
     return sendError(
       res,
       AUTH_CODES.INVALID_CREDENTIALS,
       HTTP_STATUS.UNAUTHORIZED,
-
     )
   }
   const passwordValid = await bcrypt.compare(password, identity.passwordHash);
   if (!passwordValid) {
+    log.warn({ email }, "Login failed: invalid password");
     return sendError(
       res,
       AUTH_CODES.INVALID_CREDENTIALS,
@@ -78,12 +78,10 @@ export async function loginController(req: Request, res: Response) {
     path: "/auth",
   });
 
+  log.info({ userId: user.id, sessionId }, "User logged in");
+
   // Return safe user object
   const { id, name, email: returnedEmail, picture, status, emailVerifiedAt } = user;
-  // res.json({
-  //   accessToken,
-  //   user: { id, name, email: returnedEmail, picture, status, emailVerifiedAt }
-  // });
   return sendSuccess(
     res,
     AUTH_CODES.LOGIN_SUCCESS,
@@ -94,4 +92,3 @@ export async function loginController(req: Request, res: Response) {
     HTTP_STATUS.OK
   )
 }
-

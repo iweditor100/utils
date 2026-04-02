@@ -4,6 +4,9 @@ import { HTTP_STATUS, UPLOAD_CODES } from "../../constants";
 import { fileIdParamSchema } from "./uploads.validators";
 import { getDownloadUrl } from "./uploads.service";
 import { UploadNotFoundError, UploadAccessDeniedError } from "./uploads.errors";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("uploads");
 
 export async function getDownloadUrlController(req: Request, res: Response) {
     const parsed = fileIdParamSchema.safeParse(req.params);
@@ -16,7 +19,6 @@ export async function getDownloadUrlController(req: Request, res: Response) {
 
     try {
         const result = await getDownloadUrl(fileId, userId);
-        console.log("backend hit to download a file")
         return sendSuccess(res, UPLOAD_CODES.UPLOAD_URL_SUCCESS, result, HTTP_STATUS.OK);
     } catch (error) {
         if (error instanceof UploadNotFoundError) {
@@ -25,7 +27,7 @@ export async function getDownloadUrlController(req: Request, res: Response) {
         if (error instanceof UploadAccessDeniedError) {
             return sendError(res, UPLOAD_CODES.UPLOAD_ACCESS_DENIED, HTTP_STATUS.FORBIDDEN);
         }
-        console.error("[DOWNLOAD] Unexpected error:", error);
+        log.error({ err: error, fileId, userId }, "Download URL generation failed");
         return sendError(res, UPLOAD_CODES.UPLOAD_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     }
 }

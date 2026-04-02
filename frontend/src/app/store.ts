@@ -10,6 +10,7 @@ import { serviceAreaApi } from '../features/serviceAreas/serviceAreaApi';
 import { availabilityApi } from '../features/users/availabilityApi';
 import { userSettingsApi } from '../features/users/userSettingsApi';
 import { downloadsApi } from '../features/downloads/downloadsApi';
+import { annotationApi } from '../features/annotations/annotationApi';
 
 export const store = configureStore({
     reducer: {
@@ -23,9 +24,10 @@ export const store = configureStore({
         [availabilityApi.reducerPath]: availabilityApi.reducer,
         [userSettingsApi.reducerPath]: userSettingsApi.reducer,
         [downloadsApi.reducerPath]: downloadsApi.reducer,
+        [annotationApi.reducerPath]: annotationApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-        getDefaultMiddleware().concat(authApi.middleware, usersApi.middleware, uploadsApi.middleware, calendarApi.middleware, googleCalendarApi.middleware, serviceAreaApi.middleware, availabilityApi.middleware, userSettingsApi.middleware, downloadsApi.middleware),
+        getDefaultMiddleware().concat(authApi.middleware, usersApi.middleware, uploadsApi.middleware, calendarApi.middleware, googleCalendarApi.middleware, serviceAreaApi.middleware, availabilityApi.middleware, userSettingsApi.middleware, downloadsApi.middleware, annotationApi.middleware),
     devTools: import.meta.env.VITE_NODE_ENV !== "production",
 });
 

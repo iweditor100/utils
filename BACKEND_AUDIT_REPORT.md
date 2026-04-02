@@ -33,6 +33,9 @@
 
 ### CRIT-01 — Live Secrets Committed to Repository
 
+### Resolved: ✅ , Not concerned about revolving them
+
+
 **Location:** `backend/src/infra/storage/.env`
 
 **Impact:** Complete infrastructure compromise — R2 bucket, SMTP account, database, JWT signing keys all exposed.
@@ -65,6 +68,7 @@ TOKEN_VALUE=y35jScaONbz2fU25EV3MVc_fISJ0CMUP4TvljnIG
 ---
 
 ### CRIT-02 — Socket.IO Room Hijacking (Zero Auth)
+### Resolved: ✅ 
 
 **Location:** `backend/src/infra/socket/socket.ts` lines 14-22
 
@@ -110,6 +114,19 @@ socket.join(`user:${socket.data.userId}`);
 ---
 
 ### CRIT-03 — Session Revocation Not Enforced on 20+ Endpoints
+### Resolved: ✅ 
+
+```
+  how: We are now validating the session in the auth middleware. 
+  the flow is this: 
+  request -> auth middlware -> validates the jwt -> validate the session(redis first then db fallback). 
+  redis : 5min holds the session, 
+  jwt token: 15min validate -> the refresh hit. 
+
+  <!-- NO REFRESH CALL GETS HIT FROM HERE -->
+```
+
+
 
 **Location:** `backend/src/modules/auth/middlewares/authenticate.middleware.ts`
 
@@ -193,6 +210,11 @@ Additionally: remove or archive `dev.routes.ts` before launch; never merge unaut
 ---
 
 ### HIGH-01 — Google Calendar Webhook Token is the User's Public ID
+### Resolved: ✅ 
+
+```
+  How: We just changed the simple token to hashed token with userId.  
+```
 
 **Location:** `backend/src/modules/google/googleCalendar.controller.ts:webhook`, `googleCalendar.sync.service.ts:createWatchChannel`
 
@@ -212,6 +234,8 @@ if (channelToken !== integration.userId) return;  // "security" check is bypassa
 ---
 
 ### HIGH-02 — No Rate Limiting on Any Endpoint
+
+### Resolved: Not concerned right now.
 
 **Location:** `backend/src/app.ts` — no rate limiting middleware present
 

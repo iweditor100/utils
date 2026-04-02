@@ -9,6 +9,9 @@ import {
 
 import { r2Client } from "../infra/storage/r2.client";
 import { env } from "../config/env";
+import { createChildLogger } from "../logger";
+
+const log = createChildLogger("image-worker");
 
 function streamToBuffer(stream: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -32,7 +35,7 @@ export const createImageWorker = () => {
       const { key } = job.data;
 
       if (!key?.includes("original")) {
-        console.log("[image] skip (not original):", key);
+        log.debug({ key }, "Skipping non-original image");
         return;
       }
 
@@ -42,14 +45,14 @@ export const createImageWorker = () => {
       const SUPPORTED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".tif", ".tiff"]);
       const ext = key.slice(key.lastIndexOf(".")).toLowerCase();
       if (!SUPPORTED_EXTENSIONS.has(ext)) {
-        console.log("[image] unsupported format, skipping:", key);
+        log.warn({ key, ext }, "Unsupported image format, skipping");
         return;
       }
 
       const thumbKey = key.replace("original", "thumb");
       const mediumKey = key.replace("original", "medium");
 
-      // 🔒 Idempotency (check BOTH)
+      // Idempotency (check BOTH)
       const [thumbExists, mediumExists] = await Promise.allSettled([
         r2Client.send(
           new HeadObjectCommand({
@@ -69,11 +72,11 @@ export const createImageWorker = () => {
         thumbExists.status === "fulfilled" &&
         mediumExists.status === "fulfilled"
       ) {
-        console.log("[image] already processed:", key);
+        log.debug({ key }, "Image already processed, skipping");
         return;
       }
 
-      // 📥 Fetch original (defensive)
+      // Fetch original (defensive)
       let originalObject;
       try {
         originalObject = await r2Client.send(
@@ -84,21 +87,21 @@ export const createImageWorker = () => {
         );
       } catch (err: any) {
         if (err?.Code === "NoSuchKey") {
-          console.warn("[image] original missing, skipping:", key);
-          return; // ✅ DO NOT FAIL
+          log.warn({ key }, "Original image missing in R2, skipping");
+          return; // DO NOT FAIL
         }
         throw err; // retry infra issues
       }
 
       if (!originalObject.Body) {
-        console.warn("[image] empty body:", key);
+        log.warn({ key }, "Empty body from R2, skipping");
         return;
       }
 
       const originalBuffer = await streamToBuffer(originalObject.Body);
       const contentType = originalObject.ContentType || "image/jpeg";
 
-      // 🧠 Process with sharp (defensive)
+      // Process with sharp (defensive)
       let thumb: Buffer;
       let medium: Buffer;
 
@@ -111,11 +114,11 @@ export const createImageWorker = () => {
           .resize(500, 500, { fit: "cover" })
           .toBuffer();
       } catch (err) {
-        console.error("[image] sharp failed, skipping:", key, err);
-        return; // ✅ bad image → skip
+        log.error({ err, key }, "Sharp processing failed, skipping");
+        return; // bad image → skip
       }
 
-      // 📤 Upload (retry-worthy if fails)
+      // Upload (retry-worthy if fails)
       try {
         await Promise.all([
           r2Client.send(
@@ -136,18 +139,15 @@ export const createImageWorker = () => {
           ),
         ]);
       } catch (err) {
-        console.error("[image] upload failed:", key, err);
-        throw err; // ✅ retry this
+        log.error({ err, key }, "R2 upload failed");
+        throw err; // retry this
       }
 
-      console.log("[image] processed:", key);
+      log.info({ key }, "Image processed successfully");
     },
     {
       connection,
       concurrency: 2,
-
-      // 🔁 retry strategy (important)
-      // NOTE: this is set when adding job ideally, but can also be enforced here
       limiter: {
         max: 50,
         duration: 1000,
@@ -156,11 +156,11 @@ export const createImageWorker = () => {
   );
 
   worker.on("completed", (job) => {
-    console.log("[image] completed:", job.id);
+    log.info({ jobId: job.id }, "Image worker: job completed");
   });
 
   worker.on("failed", (job, error) => {
-    console.error("[image] failed:", job?.id, error);
+    log.error({ jobId: job?.id, err: error }, "Image worker: job failed");
   });
 
   return worker;

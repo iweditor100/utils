@@ -94,6 +94,10 @@ export function useZipDownload(): UseZipDownloadResult {
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
+                } else {
+                    setError(s.error ?? "ZIP generation failed");
+                    setPhase("failed");
+                    setJobId(null);
                 }
             } catch {
                 setError("Failed to fetch download URL");
@@ -102,13 +106,23 @@ export function useZipDownload(): UseZipDownloadResult {
             }
         };
 
+        const onFailed = (data: { jobId: string; error?: string }) => {
+            if (data.jobId !== jobId) return;
+            clearTimeout(timeoutId);
+            setError(data.error ?? "ZIP generation failed");
+            setPhase("failed");
+            setJobId(null);
+        };
+
         socket.on("download:progress", onProgress);
         socket.on("download:complete", onComplete);
+        socket.on("download:failed", onFailed);
 
         return () => {
             clearTimeout(timeoutId);
             socket.off("download:progress", onProgress);
             socket.off("download:complete", onComplete);
+            socket.off("download:failed", onFailed);
         };
     }, [jobId, fetchStatus]);
 

@@ -4,6 +4,10 @@ import { sendError, sendSuccess } from "../../utils";
 import { AUTH_CODES, HTTP_STATUS } from "../../constants";
 import { GOOGLE_CALENDAR_CODES } from "../../constants/googleCalendar.codes";
 import { redis } from "../../infra/redis";
+import crypto from "crypto";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("google-calendar");
 
 
 export class GoogleCalendarController {
@@ -18,6 +22,7 @@ export class GoogleCalendarController {
             const url = await GoogleCalendarService.generateAuthUrl(userId);
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_AUTH_URL_GENERATED, { url }, HTTP_STATUS.OK);
         } catch (error) {
+            log.error({ err: error, userId: req.user?.userId }, "Google connect failed");
             return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
         }
     }
@@ -28,10 +33,12 @@ export class GoogleCalendarController {
             const userId = req.user?.userId;
             if (!userId) return sendError(res, AUTH_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED); //found no user id,
 
-            await GoogleCalendarService.disconnect(userId); //disconnect for this user. 
+            await GoogleCalendarService.disconnect(userId); //disconnect for this user.
+            log.info({ userId }, "Google Calendar disconnected");
             return sendSuccess(res, GOOGLE_CALENDAR_CODES.GOOGLE_DISCONNECTED, {}, HTTP_STATUS.OK);
         } catch (error) {
-            return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR); //some internal error was caught. 
+            log.error({ err: error, userId: req.user?.userId }, "Google disconnect failed");
+            return sendError(res, GOOGLE_CALENDAR_CODES.GOOGLE_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR); //some internal error was caught.
         }
     }
 
@@ -152,7 +159,7 @@ export class GoogleCalendarController {
             const channelToken = req.headers['x-goog-channel-token'] as string;
 
             if (resourceState === 'sync') return;
-            if (!channelId || !resourceId) return;
+            if (!channelId || !resourceId || !channelToken) return;
 
             const prisma = await import("../../prisma/client").then(m => m.getPrisma());
 
@@ -163,16 +170,25 @@ export class GoogleCalendarController {
                 }
             });
 
-            if (!integration) return;
+            if (!integration?.webhookTokenHash) return;
 
-            // Verify the token Google echoes back matches the userId we set on watch creation
-            if (channelToken !== integration.userId) return;
+            // Hash the incoming token and compare with the stored hash.
+            // timingSafeEqual prevents timing attacks.
+            const incomingHash = crypto.createHash("sha256").update(channelToken).digest("hex");
+            const storedHash = integration.webhookTokenHash;
+
+            const incomingBuf = Buffer.from(incomingHash, "hex");
+            const storedBuf = Buffer.from(storedHash, "hex");
+
+            if (incomingBuf.length !== storedBuf.length) return;
+            if (!crypto.timingSafeEqual(incomingBuf, storedBuf)) return;
 
             const { GoogleCalendarSyncService } = await import("./googleCalendar.sync.service");
             await GoogleCalendarSyncService.pullRemoteChanges(integration.userId);
 
         } catch (error) {
-            // intentionally silent — webhook errors must not affect Google retry logic
+            // intentionally silent response — but log internally so we can investigate
+            log.error({ err: error }, "Webhook processing failed");
         }
     }
 }

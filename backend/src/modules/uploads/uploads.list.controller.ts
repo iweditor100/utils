@@ -3,6 +3,9 @@ import { z } from "zod";
 import { sendError, sendSuccess } from "../../utils";
 import { HTTP_STATUS, UPLOAD_CODES } from "../../constants";
 import { listUploads } from "./uploads.service";
+import { createChildLogger } from "../../logger";
+
+const log = createChildLogger("uploads");
 
 const listQuerySchema = z.object({
     page:  z.coerce.number().int().positive().default(1),
@@ -22,7 +25,7 @@ export async function listUploadsController(req: Request, res: Response) {
         const result = await listUploads(userId, page, limit);
         return sendSuccess(res, UPLOAD_CODES.UPLOAD_LIST_SUCCESS, result, HTTP_STATUS.OK);
     } catch (error) {
-        console.error("[LIST UPLOADS] Unexpected error:", error);
+        log.error({ err: error, userId }, "List uploads failed");
         return sendError(res, UPLOAD_CODES.UPLOAD_INTERNAL_ERROR, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     }
 }

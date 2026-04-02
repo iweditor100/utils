@@ -3,6 +3,9 @@ import { generateRefreshToken } from "../utils/refreshToken";
 import { hashToken } from "../utils/tokenHash";
 import { audit } from "../../../services/audit/audit.service";
 import { redis } from "../../../infra/redis";
+import { createChildLogger } from "../../../logger";
+
+const log = createChildLogger("session");
 
 const prisma = getPrisma();
 
@@ -42,6 +45,7 @@ export class SessionService {
           expiresAt: sessionExpiresAt
         }
       });
+      await redis.set(getSessionValidationKey(session.id), "1", "EX", 300).catch(() => {});
       await tx.refreshToken.create({
         data: {
           userId: input.userId,
@@ -236,11 +240,10 @@ export class SessionService {
 
       // Cache hit: session was recently validated as valid
       if (cached === "1") {
-        console.log("[AUTH] Redis HIT",
-          Number(redisEnd - redisStart) / 1e6, "ms",
-          "| total",
-          Number(redisEnd - start) / 1e6, "ms"
-        );
+        log.debug({
+          redis_ms: Number(redisEnd - redisStart) / 1e6,
+          total_ms: Number(redisEnd - start) / 1e6,
+        }, "Session validation: Redis HIT");
         return true;
       }
     } catch {
