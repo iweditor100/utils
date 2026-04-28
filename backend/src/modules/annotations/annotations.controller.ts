@@ -16,13 +16,10 @@ const log = createChildLogger("annotations");
 
 export async function saveAnnotationController(req: Request, res: Response) {
   try {
-    console.log(
-      "BODY:",
-      JSON.stringify(req.body, null, 2)
-    );
     const userId = req.user?.userId as string;
 
     const { uploadId, data } = req.body;
+    console.log("here is the data I got for uploading", data);
     const annotation = await saveAnnotation(uploadId, userId, data);
 
     log.info({ userId, uploadId }, "Annotation saved");

@@ -9,7 +9,6 @@ import "swiper/swiper-bundle.css";
 
 import "flatpickr/dist/flatpickr.css";
 
-import { StrictMode } from "react";
 import { ThemeProvider } from "./context/ThemeContext.tsx";
 import { SocketProvider } from "./context/SocketProvider.tsx";
 import { createRoot } from "react-dom/client";

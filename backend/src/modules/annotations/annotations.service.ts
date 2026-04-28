@@ -6,9 +6,9 @@ import { AnnotationNotFoundError, AnnotationAccessDeniedError, AnnotationPayload
 import type { AnnotationData } from "./annotations.types";
 
 const MAX_OBJECTS = 500;
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg"];
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
-export async function saveAnnotation(uploadId:string, userId: string, data: AnnotationData) {
+export async function saveAnnotation(uploadId: string, userId: string, data: AnnotationData) {
     if (data.objects.length > MAX_OBJECTS) throw new AnnotationPayloadTooLargeError();
 
     const upload = await findUploadById(uploadId);

@@ -51,16 +51,14 @@ export function useAvatarUpload() {
       throw new Error("Upload to storage failed.");
     }
 
-
     // notify the backend upload completed.
-    await completeUpload({ key, category: "avatar" , mimeType: file.type, size: file.size}).unwrap();
-
-    console.log("Upload completed, notified the backend:  ", key);
-
-
+    await completeUpload({ key, category: "avatar", mimeType: file.type, size: file.size }).unwrap();
 
     // 3. Build public URL from key and update user profile so UI and auth state reflect new image
-    const pictureUrl = getPublicUrlForKey(key);
+    let pictureUrl = getPublicUrlForKey(key);
+
+    pictureUrl = pictureUrl + "?v=" + Date.now();
+
     await updateProfile({ picture: pictureUrl }).unwrap();
 
     return pictureUrl;

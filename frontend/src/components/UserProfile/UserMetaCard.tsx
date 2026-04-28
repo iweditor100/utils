@@ -193,18 +193,18 @@ export default function UserMetaCard({ user }: UserMetaCardProps) {
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                   <div className="col-span-2">
                     <Label>Name</Label>
-                    <Input 
-                      type="text" 
-                      value={name} 
+                    <Input
+                      type="text"
+                      value={name}
                       onChange={(e) => setName(e.target.value)}
                     />
                   </div>
 
                   <div className="col-span-2">
                     <Label>Picture URL</Label>
-                    <Input 
-                      type="url" 
-                      value={picture} 
+                    <Input
+                      type="url"
+                      value={picture}
                       onChange={(e) => setPicture(e.target.value)}
                       placeholder="https://example.com/picture.jpg"
                     />

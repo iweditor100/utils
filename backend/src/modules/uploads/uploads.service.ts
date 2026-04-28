@@ -25,7 +25,7 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
     const key =
         input.category === "avatar"
             ? `${prefix}/${input.userId}/original.${ext}`
-            : `${prefix}/${input.userId}/${crypto.randomUUID()}/original.${ext}`;
+            : `${prefix}/${input.userId}/${crypto.randomUUID()}/${Date.now()}.${ext}`;
 
     const { uploadUrl } = await presignPutObject({
         key,

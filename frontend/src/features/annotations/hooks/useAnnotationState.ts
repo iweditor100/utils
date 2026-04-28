@@ -22,8 +22,11 @@ export function useAnnotationState(uploadId: string) {
     [uploadId, saveAnnotation],
   );
 
+  const rawAnnotationData = data?.data?.annotation?.data;
+  const savedData = Array.isArray(rawAnnotationData?.objects) ? rawAnnotationData : null;
+
   return {
-    savedData:  data?.data?.annotation?.data ?? null,
+    savedData,
     isLoading,
     isError,
     isDirty,

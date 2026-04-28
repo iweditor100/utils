@@ -14,5 +14,5 @@ export class AnnotationPayloadTooLargeError extends AnnotationError {
 }
 
 export class AnnotationUnsupportedTypeError extends AnnotationError {
-    constructor() { super("Annotations are only supported on JPEG images"); this.name = "AnnotationUnsupportedTypeError"; }
+    constructor() { super("Annotations are only supported on image files (JPEG, PNG, WebP)"); this.name = "AnnotationUnsupportedTypeError"; }
 }

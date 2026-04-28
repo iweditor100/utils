@@ -365,8 +365,6 @@ enum UserStatus {
 enum AuthProvider {
   GOOGLE
   EMAIL
-  MAGIC_LINK
-  PASSKEY
 }
 
 enum AuthEvent {

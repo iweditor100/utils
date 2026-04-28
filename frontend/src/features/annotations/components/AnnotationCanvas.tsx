@@ -29,18 +29,24 @@ export function AnnotationCanvas({ uploadId, imageUrl, maxWidth = "100%" }: Prop
     save,
   } = useAnnotationState(uploadId);
 
-  const { serialize, deserialize, clearAll, deleteSelected, undo, redo, canUndo, canRedo, downloadAnnotated } = useFabricCanvas(
-    canvasRef,
-    imgRef,
-    tool,
-    color,
-    strokeWidth,
-    imageLoaded,
-    markDirty,
-  );
+  const {
+    fabricRef,
+    serialize, deserialize,
+    clearAll, deleteSelected, deleteById,
+    undo, redo, canUndo, canRedo,
+    downloadAnnotated,
+    layerList,
+    bringForward, sendBackward, bringToFront, sendToBack,
+    setLayerVisibility, selectLayerObject,
+    selectedId, renameObject, setObjectFillColor, setObjectFillOpacity,
+    currentZoom, zoomIn, zoomOut, resetZoom,
+  } = useFabricCanvas(canvasRef, imgRef, tool, color, strokeWidth, imageLoaded, markDirty);
 
+  // Only deserialize once on initial load — never on save-triggered refetches
+  const hasDeserialized = useRef(false);
   useEffect(() => {
-    if (imageLoaded && savedData) {
+    if (imageLoaded && savedData && !hasDeserialized.current) {
+      hasDeserialized.current = true;
       deserialize(savedData);
     }
   }, [imageLoaded, savedData]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -50,19 +56,41 @@ export function AnnotationCanvas({ uploadId, imageUrl, maxWidth = "100%" }: Prop
   }, [save, serialize]);
 
   const handleDownload = useCallback(() => {
-    if (imgRef.current) downloadAnnotated(imgRef.current);
+    downloadAnnotated();
   }, [downloadAnnotated]);
 
-  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
+  // Clicking a layer row: switch to select tool so objects are interactive, then select the object
+  const handleLayerSelect = useCallback((id: string) => {
+    setTool("select");
+    requestAnimationFrame(() => selectLayerObject(id));
+  }, [selectLayerObject]);
+
+  // Unsaved-changes guard
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
-      if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+      const active = fabricRef.current?.getActiveObject() as any;
+      const isEditingText = active?.type === "i-text" && active?.isEditing;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+        if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+      }
+      if (!isEditingText && (e.key === "Delete" || e.key === "Backspace")) {
+        e.preventDefault();
+        deleteSelected();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, deleteSelected, fabricRef]);
 
   return (
     <div className="flex min-h-0" style={{ maxWidth }}>
@@ -70,15 +98,23 @@ export function AnnotationCanvas({ uploadId, imageUrl, maxWidth = "100%" }: Prop
       {/* ── LEFT: Canvas workspace ────────────────────────────────── */}
       <div className="flex-1 min-w-0 bg-[#f8f7f7] dark:bg-[#131313] flex flex-col">
 
-        {/* Workspace status bar */}
+        {/* Status bar */}
         <div className="flex items-center justify-between px-5 h-9 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1c1c1e]">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
-              Canvas
-            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">Canvas</span>
             <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
-            <span className="text-[11px] text-gray-400 dark:text-gray-500 capitalize font-medium">
-              {tool}
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 capitalize font-medium">{tool}</span>
+            {layerList.length > 0 && (
+              <>
+                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  {layerList.length} object{layerList.length !== 1 ? "s" : ""}
+                </span>
+              </>
+            )}
+            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+            <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 tabular-nums">
+              {Math.round(currentZoom * 100)}%
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -98,13 +134,14 @@ export function AnnotationCanvas({ uploadId, imageUrl, maxWidth = "100%" }: Prop
         </div>
 
         {/* Canvas area */}
-        <div className="flex-1 p-6 flex items-start justify-center overflow-auto">
-          <div className="relative inline-block w-full select-none overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-[#1c1c1e]">
+        <div className="flex-1 p-6 flex items-start justify-center overflow-auto relative">
+          <div className="relative inline-block select-none overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-[#1c1c1e] w-full">
+            {/* Invisible img — stays in DOM for layout sizing and ResizeObserver */}
             <img
               ref={imgRef}
               src={imageUrl}
-              alt="Annotatable image"
-              className="block w-full h-auto"
+              alt=""
+              className="block w-full h-auto invisible"
               draggable={false}
               crossOrigin="anonymous"
               onLoad={() => setImageLoaded(true)}
@@ -113,48 +150,115 @@ export function AnnotationCanvas({ uploadId, imageUrl, maxWidth = "100%" }: Prop
             {imageLoaded && (
               <canvas
                 ref={canvasRef}
+                className="absolute inset-0"
                 style={{
                   cursor:
-                    tool === "select"  ? "default"  :
-                    tool === "eraser"  ? "cell"      :
-                    tool === "text"    ? "text"      :
+                    tool === "select" ? "default"   :
+                    tool === "eraser" ? "cell"       :
+                    tool === "text"   ? "text"       :
                     "crosshair",
                 }}
               />
+            )}
+
+            {/* ── Name labels overlay ── */}
+            {imageLoaded && layerList.some(l => l.name && l.visible) && (
+              <div className="absolute inset-0 pointer-events-none">
+                {layerList
+                  .filter(l => l.name && l.visible && l.labelPos)
+                  .map(l => (
+                    <div
+                      key={l.id}
+                      style={{
+                        position:  "absolute",
+                        left:      l.labelPos!.x,
+                        top:       l.labelPos!.y,
+                        transform: "translateX(-50%) translateY(-100%)",
+                      }}
+                      className="text-[10px] font-semibold text-white bg-black/55 backdrop-blur-sm px-1.5 py-0.5 rounded whitespace-nowrap"
+                    >
+                      {l.name}
+                    </div>
+                  ))
+                }
+              </div>
             )}
 
             {/* Active tool badge */}
             <div className="absolute bottom-3 left-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/50 backdrop-blur-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                <span className="text-[10px] font-semibold text-white/90 capitalize tracking-wide">
-                  {tool}
-                </span>
+                <span className="text-[10px] font-semibold text-white/90 capitalize tracking-wide">{tool}</span>
               </span>
             </div>
+          </div>
+
+          {/* ── Zoom controls ─────────────────────────────────────────── */}
+          <div className="absolute bottom-5 right-5 z-10 flex items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-sm shadow-md overflow-hidden">
+            <button
+              onClick={zoomOut}
+              title="Zoom out (Ctrl+Scroll)"
+              className="px-2.5 py-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" d="M5 12h14" />
+              </svg>
+            </button>
+
+            <button
+              onClick={resetZoom}
+              title="Reset zoom"
+              className="px-2.5 py-2 text-[11px] font-mono font-semibold tabular-nums text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-w-[3.5rem] text-center border-x border-gray-100 dark:border-gray-700"
+            >
+              {Math.round(currentZoom * 100)}%
+            </button>
+
+            <button
+              onClick={zoomIn}
+              title="Zoom in (Ctrl+Scroll)"
+              className="px-2.5 py-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ── RIGHT: Tools panel ───────────────────────────────────── */}
-      <AnnotationToolbar
-        tool={tool}
-        color={color}
-        strokeWidth={strokeWidth}
-        isDirty={isDirty}
-        isSaving={isSaving}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onToolChange={setTool}
-        onColorChange={setColor}
-        onStrokeWidthChange={setStrokeWidth}
-        onSave={handleSave}
-        onClear={clearAll}
-        onDelete={deleteSelected}
-        onUndo={undo}
-        onRedo={redo}
-        onDownload={handleDownload}
-      />
+      {/* ── RIGHT: Sidebar ───────────────────────────────────────── */}
+      <div className="w-56 shrink-0 flex flex-col border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] overflow-y-auto">
+        <AnnotationToolbar
+          tool={tool}
+          color={color}
+          strokeWidth={strokeWidth}
+          isDirty={isDirty}
+          isSaving={isSaving}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onToolChange={setTool}
+          onColorChange={setColor}
+          onStrokeWidthChange={setStrokeWidth}
+          onSave={handleSave}
+          onClear={clearAll}
+          onDelete={deleteSelected}
+          onUndo={undo}
+          onRedo={redo}
+          onDownload={handleDownload}
+          layers={layerList}
+          onBringForward={bringForward}
+          onSendBackward={sendBackward}
+          onBringToFront={bringToFront}
+          onSendToBack={sendToBack}
+          onToggleVisibility={setLayerVisibility}
+          onSelectObject={handleLayerSelect}
+          onDeleteObject={deleteById}
+          selectedLayer={selectedId ? (layerList.find(l => l.id === selectedId) ?? null) : null}
+          onRename={renameObject}
+          onSetFillColor={setObjectFillColor}
+          onSetFillOpacity={setObjectFillOpacity}
+        />
+      </div>
     </div>
   );
 }

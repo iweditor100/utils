@@ -1,59 +1,101 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Canvas, Rect, Circle, Ellipse, Line, IText, Path, PencilBrush, Polygon as FabricPolygon, Polyline as FabricPolyline } from "fabric";
-import type { AnnotationTool, AnnotationData, AnnotationObject } from "../types";
+import { Canvas, Rect, Circle, Ellipse, Line, IText, Path, PencilBrush, Polygon as FabricPolygon, Polyline as FabricPolyline, Image as FabricImage } from "fabric";
+import type { AnnotationTool, AnnotationData, AnnotationObject, LayerItem } from "../types";
 
-const PIN_RADIUS = 8;
+// Outer teardrop + inner circle hole (evenodd) → classic Google Maps pin
+const PIN_PATH_DATA = "M 9,0 C 4.029,0 0,4.029 0,9 C 0,15.75 9,24 9,24 C 9,24 18,15.75 18,9 C 18,4.029 13.971,0 9,0 Z M 12,9 A 3,3 0 1,0 6,9 A 3,3 0 1,0 12,9 Z";
+const PIN_WIDTH  = 18;
+const PIN_HEIGHT = 24;
 
-// ─── Paint a snapshot onto a cleared canvas ───────────────────────────────────
-// Used by both deserialize and history restoration so the logic lives once.
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 8;
+
+// ─── Hex color + opacity → rgba string ───────────────────────────────────────
+function hexToRgba(hex: string, opacity: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3
+    ? h.split("").map(c => c + c).join("")
+    : h.padEnd(6, "0");
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+const DEFAULT_FILL_OPACITY = 0.4;
+function computeFill(fillColor?: string, fillOpacity?: number): string {
+  if (!fillColor) return "transparent";
+  return hexToRgba(fillColor, fillOpacity ?? DEFAULT_FILL_OPACITY);
+}
+
+function tag(fabricObj: any, id: string, type: string, color: string, visible = true, name?: string, fillColor?: string, fillOpacity?: number) {
+  fabricObj.annotationId      = id;
+  fabricObj.annotationType    = type;
+  fabricObj.annotationColor   = color;
+  fabricObj.visible           = visible;
+  if (name)                      fabricObj.annotationName        = name;
+  if (fillColor)                 fabricObj.annotationFillColor   = fillColor;
+  if (fillOpacity !== undefined) fabricObj.annotationFillOpacity = fillOpacity;
+}
+
+// ─── Paint annotation objects onto the canvas (does NOT touch backgroundImage) ─
 function paintCanvas(canvas: Canvas, data: AnnotationData) {
   const W = canvas.width!;
   const H = canvas.height!;
 
-  canvas.clear();
+  // Remove only annotation objects — backgroundImage is untouched (it's not in getObjects())
+  canvas.remove(...canvas.getObjects());
 
-  data.objects.forEach((obj) => {
+  const sorted = [...(data?.objects ?? [])].sort(
+    (a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)
+  );
+
+  for (const obj of sorted) {
+    const vis = obj.visible !== false;
+
     if (obj.type === "rect") {
       const rect = new Rect({
         left: obj.x * W, top: obj.y * H,
         width: obj.w * W, height: obj.h * H,
-        fill: "transparent", stroke: obj.color, strokeWidth: obj.strokeWidth,
+        fill: computeFill(obj.fillColor, obj.fillOpacity),
+        stroke: obj.color, strokeWidth: obj.strokeWidth, strokeUniform: true,
         selectable: false,
       });
-      (rect as any).annotationId   = obj.id;
-      (rect as any).annotationType = "rect";
+      tag(rect, obj.id, "rect", obj.color, vis, obj.name, obj.fillColor, obj.fillOpacity);
       canvas.add(rect);
 
     } else if (obj.type === "pin") {
-      const pin = new Circle({
-        left: obj.x * W - PIN_RADIUS, top: obj.y * H - PIN_RADIUS,
-        radius: PIN_RADIUS, fill: obj.color,
-        stroke: "#ffffff", strokeWidth: 1.5, selectable: false,
+      const scale = (obj.size ?? 4) / 4;
+      const pin = new Path(PIN_PATH_DATA, {
+        left: obj.x * W - (PIN_WIDTH * scale) / 2,
+        top:  obj.y * H - (PIN_HEIGHT * scale),
+        scaleX: scale, scaleY: scale,
+        fill: obj.color, stroke: "#ffffff", strokeWidth: 1.5 / scale,
+        fillRule: "evenodd", selectable: false,
       });
-      (pin as any).annotationId   = obj.id;
-      (pin as any).annotationType = "pin";
+      tag(pin, obj.id, "pin", obj.color, vis, obj.name);
       canvas.add(pin);
 
     } else if (obj.type === "circle") {
       const el = new Ellipse({
         left: (obj.cx - obj.rx) * W, top: (obj.cy - obj.ry) * H,
         rx: obj.rx * W, ry: obj.ry * H,
-        fill: "transparent", stroke: obj.color, strokeWidth: obj.strokeWidth,
+        fill: computeFill(obj.fillColor, obj.fillOpacity),
+        stroke: obj.color, strokeWidth: obj.strokeWidth, strokeUniform: true,
         selectable: false,
       });
-      (el as any).annotationId   = obj.id;
-      (el as any).annotationType = "circle";
+      tag(el, obj.id, "circle", obj.color, vis, obj.name, obj.fillColor, obj.fillOpacity);
       canvas.add(el);
 
     } else if (obj.type === "line" || obj.type === "dottedline") {
       const l = new Line([obj.x1 * W, obj.y1 * H, obj.x2 * W, obj.y2 * H], {
-        stroke: obj.color, strokeWidth: obj.strokeWidth, selectable: false,
+        stroke: obj.color, strokeWidth: obj.strokeWidth, strokeUniform: true,
+        selectable: false,
         ...(obj.type === "dottedline"
           ? { strokeDashArray: [obj.strokeWidth * 2.5, obj.strokeWidth * 2.5] }
           : {}),
       });
-      (l as any).annotationId   = obj.id;
-      (l as any).annotationType = obj.type;
+      tag(l, obj.id, obj.type, obj.color, vis, obj.name);
       canvas.add(l);
 
     } else if (obj.type === "text") {
@@ -62,8 +104,7 @@ function paintCanvas(canvas: Canvas, data: AnnotationData) {
         fontSize: obj.fontSize, fill: obj.color,
         selectable: false, editable: false,
       });
-      (t as any).annotationId   = obj.id;
-      (t as any).annotationType = "text";
+      tag(t, obj.id, "text", obj.color, vis, obj.name);
       canvas.add(t);
 
     } else if (obj.type === "freedraw") {
@@ -75,27 +116,43 @@ function paintCanvas(canvas: Canvas, data: AnnotationData) {
         fill: "transparent", stroke: obj.color, strokeWidth: obj.strokeWidth,
         selectable: false,
       });
-      (path as any).annotationId   = obj.id;
-      (path as any).annotationType = "freedraw";
+      tag(path, obj.id, "freedraw", obj.color, vis, obj.name);
       canvas.add(path);
 
     } else if (obj.type === "polygon") {
       const canvasPts = obj.points.map(p => ({ x: p.x * W, y: p.y * H }));
       const poly = new FabricPolygon(canvasPts, {
-        fill:        "transparent",
-        stroke:      obj.color,
-        strokeWidth: obj.strokeWidth,
-        selectable:  false,
-        objectCaching: false,
+        fill: computeFill(obj.fillColor, obj.fillOpacity),
+        stroke: obj.color, strokeWidth: obj.strokeWidth, strokeUniform: true,
+        selectable: false, objectCaching: false,
       });
-      (poly as any).annotationId    = obj.id;
-      (poly as any).annotationType  = "polygon";
-      (poly as any)._canvasPoints   = canvasPts;
+      tag(poly, obj.id, "polygon", obj.color, vis, obj.name, obj.fillColor, obj.fillOpacity);
+      (poly as any)._canvasPoints = canvasPts;
       canvas.add(poly);
     }
-  });
+  }
 
-  canvas.renderAll();
+  canvas.requestRenderAll();
+}
+
+// ─── Load and set background image on the canvas ─────────────────────────────
+function setBackgroundImage(canvas: Canvas, src: string): Promise<void> {
+  return FabricImage.fromURL(src, { crossOrigin: "anonymous" }).then((img) => {
+    const W = canvas.width!;
+    const H = canvas.height!;
+    img.set({
+      left: 0, top: 0,
+      scaleX: W / (img.width  ?? W),
+      scaleY: H / (img.height ?? H),
+      originX: "left", originY: "top",
+      selectable: false, evented: false,
+      hasControls: false, hasBorders: false,
+    });
+    // excludeFromExport so our serialize() never touches it
+    (img as any).excludeFromExport = true;
+    canvas.backgroundImage = img;
+    canvas.requestRenderAll();
+  });
 }
 
 export function useFabricCanvas(
@@ -109,93 +166,104 @@ export function useFabricCanvas(
 ) {
   const fabricRef = useRef<Canvas | null>(null);
 
-  // Stable ref so event handlers never go stale
   const onChangeRef = useRef(onCanvasChange);
   onChangeRef.current = onCanvasChange;
 
-  // ─── History ─────────────────────────────────────────────────────────────
   const historyRef    = useRef<AnnotationData[]>([]);
   const historyIdxRef = useRef(-1);
-  const [historyIdx, setHistoryIdx] = useState(-1); // drives canUndo / canRedo
-  const isRestoringRef    = useRef(false); // true while replaying history / deserializing
-  const isDrawingShapeRef = useRef(false); // true during mouse-drag shape creation
+  const [historyIdx,  setHistoryIdx]  = useState(-1);
+  const [layerList,   setLayerList]   = useState<LayerItem[]>([]);
+  const [selectedId,  setSelectedId]  = useState<string | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(1);
 
-  // Mutable ref updated each render so canvas event listeners always call the
-  // latest version (same pattern as onChangeRef).
+  const isRestoringRef    = useRef(false);
+  const isDrawingShapeRef = useRef(false);
+
+  // Pan state
+  const isPanningRef  = useRef(false);
+  const isDraggingRef = useRef(false);
+  const lastPanPoint  = useRef({ x: 0, y: 0 });
+
   const recordChangeRef = useRef<() => void>(() => {});
 
-  // ─── Serialise canvas → AnnotationData ───────────────────────────────────
+  // ─── Serialize ────────────────────────────────────────────────────────────
   const serialize = useCallback((): AnnotationData => {
     const canvas = fabricRef.current;
     if (!canvas) return { objects: [] };
-
     const W = canvas.width!;
     const H = canvas.height!;
     const objects: AnnotationObject[] = [];
 
-    canvas.getObjects().forEach((obj) => {
-      const id   = (obj as any).annotationId   ?? crypto.randomUUID();
-      const type = (obj as any).annotationType ?? obj.type;
+    canvas.getObjects().forEach((obj, zIndex) => {
+      const id          = (obj as any).annotationId          ?? crypto.randomUUID();
+      const type        = (obj as any).annotationType        ?? obj.type;
+      const visible     = (obj as any).visible               !== false;
+      const name        = (obj as any).annotationName        as string | undefined;
+      const fillColor   = (obj as any).annotationFillColor   as string | undefined;
+      const fillOpacity = (obj as any).annotationFillOpacity as number | undefined;
 
       if (type === "rect") {
         objects.push({
-          id, type: "rect",
+          id, type: "rect", zIndex, visible, name, fillColor, fillOpacity,
           x: obj.left! / W, y: obj.top! / H,
           w: (obj.width!  * (obj.scaleX ?? 1)) / W,
           h: (obj.height! * (obj.scaleY ?? 1)) / H,
-          color:       (obj as Rect).stroke as string ?? "#ef4444",
+          color: (obj as Rect).stroke as string ?? "#ef4444",
           strokeWidth: (obj as Rect).strokeWidth ?? 2,
         });
       } else if (type === "pin") {
-        const r = (obj as Circle).radius ?? PIN_RADIUS;
+        const p = obj as Path;
+        const scale = p.scaleX ?? 1;
         objects.push({
-          id, type: "pin",
-          x: (obj.left! + r) / W, y: (obj.top! + r) / H,
-          color: (obj as Circle).fill as string ?? "#ef4444",
+          id, type: "pin", zIndex, visible, name,
+          x: (obj.left! + (PIN_WIDTH  * scale) / 2) / W,
+          y: (obj.top!  + (PIN_HEIGHT * scale))      / H,
+          size: scale * 4,
+          color: (obj as any).annotationColor as string ?? "#ef4444",
         });
       } else if (type === "circle") {
         const el = obj as Ellipse;
         objects.push({
-          id, type: "circle",
+          id, type: "circle", zIndex, visible, name, fillColor, fillOpacity,
           cx: (obj.left! + el.rx!) / W, cy: (obj.top! + el.ry!) / H,
           rx: el.rx! / W, ry: el.ry! / H,
-          color:       el.stroke as string ?? "#ef4444",
+          color: el.stroke as string ?? "#ef4444",
           strokeWidth: el.strokeWidth ?? 2,
         });
       } else if (type === "line" || type === "dottedline") {
         const l = obj as Line;
         objects.push({
-          id, type: type as "line" | "dottedline",
+          id, type: type as "line" | "dottedline", zIndex, visible, name,
           x1: l.x1! / W, y1: l.y1! / H,
           x2: l.x2! / W, y2: l.y2! / H,
-          color:       l.stroke as string ?? "#ef4444",
+          color: l.stroke as string ?? "#ef4444",
           strokeWidth: l.strokeWidth ?? 2,
         });
       } else if (type === "text") {
         const t = obj as IText;
         objects.push({
-          id, type: "text",
+          id, type: "text", zIndex, visible, name,
           x: obj.left! / W, y: obj.top! / H,
           text: t.text ?? "", fontSize: t.fontSize ?? 20,
           color: t.fill as string ?? "#ef4444",
         });
-      } else if (obj.type === "path") {
+      } else if (type === "freedraw") {
         const p = obj as Path;
         objects.push({
-          id, type: "freedraw",
-          path:        (p as any).path as (string | number)[][],
+          id, type: "freedraw", zIndex, visible, name,
+          path: (p as any).path as (string | number)[][],
           refW: W, refH: H,
           left: p.left! / W, top: p.top! / H,
-          color:       p.stroke as string ?? "#ef4444",
+          color: p.stroke as string ?? "#ef4444",
           strokeWidth: p.strokeWidth ?? 3,
         });
       } else if (type === "polygon") {
         const rawPts = (obj as any)._canvasPoints as { x: number; y: number }[] | undefined;
         if (rawPts && rawPts.length >= 3) {
           objects.push({
-            id, type: "polygon",
-            points:      rawPts.map(p => ({ x: p.x / W, y: p.y / H })),
-            color:       (obj as FabricPolygon).stroke as string ?? "#ef4444",
+            id, type: "polygon", zIndex, visible, name, fillColor, fillOpacity,
+            points: rawPts.map(p => ({ x: p.x / W, y: p.y / H })),
+            color: (obj as FabricPolygon).stroke as string ?? "#ef4444",
             strokeWidth: (obj as FabricPolygon).strokeWidth ?? 2,
           });
         }
@@ -205,17 +273,45 @@ export function useFabricCanvas(
     return { objects };
   }, []);
 
-  // Keep recordChangeRef current every render
+  // ─── Layer list ───────────────────────────────────────────────────────────
+  const updateLayers = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) { setLayerList([]); return; }
+    const objs = canvas.getObjects(); // backgroundImage not included
+    setLayerList(
+      [...objs].reverse().map((o, ri) => {
+        const bounds = (o as any).getBoundingRect?.() as { left: number; top: number; width: number; height: number } | undefined;
+        const name = (o as any).annotationName as string | undefined;
+        return {
+          id:          (o as any).annotationId       as string ?? "",
+          type:        (o as any).annotationType     as string ?? o.type,
+          color:       (o as any).annotationColor    as string ?? "#666666",
+          visible:     (o as any).visible            !== false,
+          zIndex:      objs.length - 1 - ri,
+          name,
+          fillColor:   (o as any).annotationFillColor   as string | undefined,
+          fillOpacity: (o as any).annotationFillOpacity as number | undefined,
+          labelPos:    name && bounds
+            ? { x: bounds.left + bounds.width / 2, y: bounds.top }
+            : undefined,
+        };
+      })
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   recordChangeRef.current = () => {
-    // Bail during history replay, deserialize, or mid-drag shape creation
     if (isRestoringRef.current || isDrawingShapeRef.current) return;
     onChangeRef.current?.();
     const snapshot = serialize();
-    // Truncate redo stack when a new action is recorded
     historyRef.current = historyRef.current.slice(0, historyIdxRef.current + 1);
     historyRef.current.push(snapshot);
+    const MAX_HISTORY = 50;
+    if (historyRef.current.length > MAX_HISTORY) {
+      historyRef.current = historyRef.current.slice(-MAX_HISTORY);
+    }
     historyIdxRef.current = historyRef.current.length - 1;
     setHistoryIdx(historyIdxRef.current);
+    updateLayers();
   };
 
   // ─── Canvas initialisation ────────────────────────────────────────────────
@@ -225,43 +321,113 @@ export function useFabricCanvas(
     const img = imageRef.current;
 
     const canvas = new Canvas(canvasRef.current, {
-      width: img.offsetWidth,
+      width:  img.offsetWidth,
       height: img.offsetHeight,
       selection: false,
       stopContextMenu: true,
+      renderOnAddRemove: true, // keep simple — we call requestRenderAll where needed
     });
 
+    // Position the Fabric wrapper to cover the container
     const wrapper = canvas.wrapperEl as HTMLElement;
     Object.assign(wrapper.style, {
       position: "absolute",
       top: "0", left: "0",
-      pointerEvents: "auto",
+      width:  `${img.offsetWidth}px`,
+      height: `${img.offsetHeight}px`,
     });
 
+    fabricRef.current = canvas;
+
+    // Load the image as Fabric's built-in backgroundImage (excluded from getObjects / events)
+    setBackgroundImage(canvas, img.src);
+
+    // ── Wheel zoom ────────────────────────────────────────────────────────
+    // Attach directly to upperCanvasEl with passive:false so preventDefault works
+    const upperCanvas = canvas.upperCanvasEl as HTMLCanvasElement;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9; // scroll up = zoom in
+      const zoom = Math.min(Math.max(canvas.getZoom() * factor, MIN_ZOOM), MAX_ZOOM);
+      canvas.zoomToPoint({ x: e.offsetX, y: e.offsetY }, zoom);
+      canvas.requestRenderAll();
+      setCurrentZoom(parseFloat(zoom.toFixed(4)));
+    };
+    upperCanvas.addEventListener("wheel", handleWheel, { passive: false });
+
+    // ── Pan ───────────────────────────────────────────────────────────────
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) isPanningRef.current = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        isPanningRef.current = false;
+        isDraggingRef.current = false;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup",   onKeyUp);
+
+    canvas.on("mouse:down", (opt) => {
+      const e = opt.e as MouseEvent;
+      if (isPanningRef.current || e.button === 1) {
+        isDraggingRef.current = true;
+        lastPanPoint.current = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    canvas.on("mouse:move", (opt) => {
+      if (!isDraggingRef.current) return;
+      const e = opt.e as MouseEvent;
+      const dx = e.clientX - lastPanPoint.current.x;
+      const dy = e.clientY - lastPanPoint.current.y;
+      // absolutePan takes the top-left corner of the viewport in canvas coords — negate delta
+      const vpt = canvas.viewportTransform!;
+      canvas.setViewportTransform([vpt[0], vpt[1], vpt[2], vpt[3], vpt[4] + dx, vpt[5] + dy]);
+      canvas.requestRenderAll();
+      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+    });
+
+    canvas.on("mouse:up", () => { isDraggingRef.current = false; });
+
+    // ── Change tracking ───────────────────────────────────────────────────
     const notify = () => recordChangeRef.current();
     canvas.on("object:added",    notify);
     canvas.on("object:modified", notify);
     canvas.on("object:removed",  notify);
-    // NOTE: path:created is intentionally omitted — Fabric also fires object:added
-    // for the same path, so listening to both would double-record every freedraw stroke.
 
-    fabricRef.current = canvas;
+    const onSelect   = (e: any) => setSelectedId((e.selected?.[0] as any)?.annotationId ?? null);
+    const onDeselect = ()       => setSelectedId(null);
+    canvas.on("selection:created", onSelect);
+    canvas.on("selection:updated", onSelect);
+    canvas.on("selection:cleared", onDeselect);
 
-    // Seed history with an empty state so the very first drawn shape can be undone
+    // Seed history
     historyRef.current    = [{ objects: [] }];
     historyIdxRef.current = 0;
     setHistoryIdx(0);
 
+    // ResizeObserver: resize canvas when the img element changes size
+    let resizeTimer: ReturnType<typeof setTimeout>;
     const ro = new ResizeObserver(() => {
-      if (!imageRef.current) return;
-      canvas.setWidth(imageRef.current.offsetWidth);
-      canvas.setHeight(imageRef.current.offsetHeight);
-      canvas.renderAll();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (!imageRef.current || !fabricRef.current) return;
+        resizeCanvasRef.current(
+          imageRef.current.offsetWidth,
+          imageRef.current.offsetHeight,
+        );
+      }, 100);
     });
     ro.observe(img);
 
     return () => {
+      clearTimeout(resizeTimer);
       ro.disconnect();
+      upperCanvas.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup",   onKeyUp);
       canvas.dispose();
       fabricRef.current = null;
     };
@@ -272,17 +438,25 @@ export function useFabricCanvas(
     const canvas = fabricRef.current;
     if (!canvas || !ready) return;
 
+    canvas.getObjects().forEach((o) => {
+      if ((o as any).type === "i-text") (o as IText).exitEditing?.();
+    });
+
     canvas.isDrawingMode = false;
     canvas.selection = false;
     canvas.getObjects().forEach((o) => { o.selectable = false; });
 
     if (tool === "select") {
       canvas.selection = true;
-      canvas.getObjects().forEach((o) => { o.selectable = true; });
+      canvas.getObjects().forEach((o) => {
+        o.selectable = (o as any).visible !== false;
+      });
       return () => {
         if (!fabricRef.current) return;
+        fabricRef.current.discardActiveObject();
         fabricRef.current.selection = false;
         fabricRef.current.getObjects().forEach((o) => { o.selectable = false; });
+        fabricRef.current.requestRenderAll();
       };
     }
 
@@ -292,8 +466,17 @@ export function useFabricCanvas(
       brush.width = strokeWidth;
       canvas.freeDrawingBrush = brush;
       canvas.isDrawingMode = true;
+
+      const onPathCreated = (e: any) => {
+        if (e.path) tag(e.path, crypto.randomUUID(), "freedraw", color);
+      };
+      canvas.on("path:created", onPathCreated);
+
       return () => {
-        if (fabricRef.current) fabricRef.current.isDrawingMode = false;
+        if (fabricRef.current) {
+          fabricRef.current.isDrawingMode = false;
+          fabricRef.current.off("path:created", onPathCreated);
+        }
       };
     }
 
@@ -303,16 +486,17 @@ export function useFabricCanvas(
       let isDown = false;
 
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const ptr = e.scenePoint;
         startX = ptr.x; startY = ptr.y;
         isDown = true;
-        isDrawingShapeRef.current = true; // suppress history until mouse:up
+        isDrawingShapeRef.current = true;
         activeRect = new Rect({
           left: startX, top: startY, width: 0, height: 0,
-          fill: "transparent", stroke: color, strokeWidth, selectable: false,
+          fill: "transparent", stroke: color, strokeWidth, strokeUniform: true,
+          selectable: false,
         });
-        (activeRect as any).annotationId   = crypto.randomUUID();
-        (activeRect as any).annotationType = "rect";
+        tag(activeRect, crypto.randomUUID(), "rect", color);
         canvas.add(activeRect);
       };
       const onMove = (e: any) => {
@@ -320,19 +504,18 @@ export function useFabricCanvas(
         const ptr = e.scenePoint;
         const dw = ptr.x - startX, dh = ptr.y - startY;
         activeRect.set({
-          width: Math.abs(dw), height: Math.abs(dh),
-          left: dw < 0 ? ptr.x : startX,
-          top:  dh < 0 ? ptr.y : startY,
+          width:  Math.abs(dw), height: Math.abs(dh),
+          left:   dw < 0 ? ptr.x : startX,
+          top:    dh < 0 ? ptr.y : startY,
         });
-        canvas.renderAll();
+        canvas.requestRenderAll();
       };
       const onUp = () => {
         const tooSmall = activeRect && (activeRect.width ?? 0) < 4 && (activeRect.height ?? 0) < 4;
         if (tooSmall) canvas.remove(activeRect!);
-        isDown = false;
-        activeRect = null;
+        isDown = false; activeRect = null;
         isDrawingShapeRef.current = false;
-        if (!tooSmall) recordChangeRef.current(); // record exactly once
+        if (!tooSmall) recordChangeRef.current();
       };
 
       canvas.on("mouse:down", onDown);
@@ -352,16 +535,17 @@ export function useFabricCanvas(
       let isDown = false;
 
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const ptr = e.scenePoint;
         startX = ptr.x; startY = ptr.y;
         isDown = true;
         isDrawingShapeRef.current = true;
         activeEllipse = new Ellipse({
           left: startX, top: startY, rx: 0, ry: 0,
-          fill: "transparent", stroke: color, strokeWidth, selectable: false,
+          fill: "transparent", stroke: color, strokeWidth, strokeUniform: true,
+          selectable: false,
         });
-        (activeEllipse as any).annotationId   = crypto.randomUUID();
-        (activeEllipse as any).annotationType = "circle";
+        tag(activeEllipse, crypto.randomUUID(), "circle", color);
         canvas.add(activeEllipse);
       };
       const onMove = (e: any) => {
@@ -371,13 +555,12 @@ export function useFabricCanvas(
           rx: Math.abs(ptr.x - startX) / 2, ry: Math.abs(ptr.y - startY) / 2,
           left: Math.min(startX, ptr.x), top: Math.min(startY, ptr.y),
         });
-        canvas.renderAll();
+        canvas.requestRenderAll();
       };
       const onUp = () => {
         const tooSmall = activeEllipse && (activeEllipse.rx ?? 0) < 2;
         if (tooSmall) canvas.remove(activeEllipse!);
-        isDown = false;
-        activeEllipse = null;
+        isDown = false; activeEllipse = null;
         isDrawingShapeRef.current = false;
         if (!tooSmall) recordChangeRef.current();
       };
@@ -400,30 +583,29 @@ export function useFabricCanvas(
       let isDown = false;
 
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const ptr = e.scenePoint;
         startX = ptr.x; startY = ptr.y;
         isDown = true;
         isDrawingShapeRef.current = true;
         activeLine = new Line([startX, startY, startX, startY], {
-          stroke: color, strokeWidth, selectable: false,
+          stroke: color, strokeWidth, strokeUniform: true, selectable: false,
           ...(isDotted ? { strokeDashArray: [strokeWidth * 2.5, strokeWidth * 2.5] } : {}),
         });
-        (activeLine as any).annotationId   = crypto.randomUUID();
-        (activeLine as any).annotationType = tool;
+        tag(activeLine, crypto.randomUUID(), tool, color);
         canvas.add(activeLine);
       };
       const onMove = (e: any) => {
         if (!isDown || !activeLine) return;
         const ptr = e.scenePoint;
         activeLine.set({ x2: ptr.x, y2: ptr.y });
-        canvas.renderAll();
+        canvas.requestRenderAll();
       };
       const onUp = () => {
         const tooSmall = activeLine &&
           Math.hypot((activeLine.x2 ?? 0) - (activeLine.x1 ?? 0), (activeLine.y2 ?? 0) - (activeLine.y1 ?? 0)) < 4;
         if (tooSmall) canvas.remove(activeLine!);
-        isDown = false;
-        activeLine = null;
+        isDown = false; activeLine = null;
         isDrawingShapeRef.current = false;
         if (!tooSmall) recordChangeRef.current();
       };
@@ -441,13 +623,13 @@ export function useFabricCanvas(
 
     if (tool === "text") {
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const ptr = e.scenePoint;
         const text = new IText("Text", {
           left: ptr.x, top: ptr.y, fontSize: 20,
           fill: color, selectable: true, editable: true,
         });
-        (text as any).annotationId   = crypto.randomUUID();
-        (text as any).annotationType = "text";
+        tag(text, crypto.randomUUID(), "text", color);
         canvas.add(text);
         canvas.setActiveObject(text);
         text.enterEditing();
@@ -459,14 +641,18 @@ export function useFabricCanvas(
 
     if (tool === "pin") {
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const ptr = e.scenePoint;
-        const pin = new Circle({
-          left: ptr.x - PIN_RADIUS, top: ptr.y - PIN_RADIUS,
-          radius: PIN_RADIUS, fill: color,
-          stroke: "#ffffff", strokeWidth: 1.5, selectable: false,
+        const scale = strokeWidth / 4;
+        const pin = new Path(PIN_PATH_DATA, {
+          left: ptr.x - (PIN_WIDTH * scale) / 2,
+          top:  ptr.y - (PIN_HEIGHT * scale),
+          scaleX: scale, scaleY: scale,
+          fill: color, stroke: "#ffffff", strokeWidth: 1.5 / scale,
+          fillRule: "evenodd", selectable: false,
         });
-        (pin as any).annotationId   = crypto.randomUUID();
-        (pin as any).annotationType = "pin";
+        tag(pin, crypto.randomUUID(), "pin", color);
+        (pin as any).size = strokeWidth;
         canvas.add(pin);
       };
       canvas.on("mouse:down", onDown);
@@ -475,14 +661,13 @@ export function useFabricCanvas(
 
     if (tool === "polygon") {
       const pts: { x: number; y: number }[] = [];
-      const CLOSE_DIST = 14; // px — snap-to-close threshold
+      const CLOSE_DIST = 14;
       let rubberLine: Line | null = null;
       let pathLine: FabricPolyline | null = null;
       const dots: Circle[] = [];
       let done = false;
-      isDrawingShapeRef.current = true; // suppress temp-object events until commit
+      isDrawingShapeRef.current = true;
 
-      // Rebuild the "drawn so far" polyline (sits below dots)
       const refreshPath = () => {
         if (pathLine) { canvas.remove(pathLine); pathLine = null; }
         if (pts.length < 2) return;
@@ -491,7 +676,6 @@ export function useFabricCanvas(
           selectable: false, evented: false, objectCaching: false,
         });
         canvas.add(pathLine);
-        // Keep dots on top of the path
         dots.forEach(d => { canvas.remove(d); canvas.add(d); });
       };
 
@@ -508,69 +692,53 @@ export function useFabricCanvas(
         cleanupTemp();
         if (pts.length < 3) {
           isDrawingShapeRef.current = false;
-          canvas.renderAll();
+          canvas.requestRenderAll();
           return;
         }
         const canvasPts = [...pts];
         const poly = new FabricPolygon(canvasPts, {
-          fill:        "transparent",
-          stroke:      color,
-          strokeWidth,
-          selectable:  false,
-          objectCaching: false,
+          fill: "transparent", stroke: color, strokeWidth, strokeUniform: true,
+          selectable: false, objectCaching: false,
         });
-        (poly as any).annotationId   = crypto.randomUUID();
-        (poly as any).annotationType = "polygon";
-        (poly as any)._canvasPoints  = canvasPts;
-        isDrawingShapeRef.current = false; // allow the object:added below to record
+        tag(poly, crypto.randomUUID(), "polygon", color);
+        (poly as any)._canvasPoints = canvasPts;
+        isDrawingShapeRef.current = false;
         canvas.add(poly);
-        canvas.renderAll();
         pts.length = 0;
       };
 
       const onDown = (e: any) => {
-        if (done) return;
+        if (done || isDraggingRef.current) return;
         const ptr = e.scenePoint;
-
-        // Snap-to-close: clicking near the first point closes the polygon
         if (pts.length >= 3) {
           const d = Math.hypot(ptr.x - pts[0].x, ptr.y - pts[0].y);
           if (d <= CLOSE_DIST) { commit(); return; }
         }
-
         pts.push({ x: ptr.x, y: ptr.y });
-
-        // First dot is hollow (white fill) — visual cue for the close target
         const isFirst = pts.length === 1;
         const dot = new Circle({
           left: ptr.x - 5, top: ptr.y - 5,
-          radius:      5,
-          fill:        isFirst ? "#ffffff" : color,
-          stroke:      color,
-          strokeWidth: 1.5,
+          radius: 5,
+          fill: isFirst ? "#ffffff" : color,
+          stroke: color, strokeWidth: 1.5,
           selectable: false, evented: false, objectCaching: false,
         });
         canvas.add(dot);
         dots.push(dot);
-
         refreshPath();
-        canvas.renderAll();
+        canvas.requestRenderAll();
       };
 
       const onMove = (e: any) => {
-        if (done || pts.length === 0) return;
+        if (done || pts.length === 0 || isDraggingRef.current) return;
         const ptr  = e.scenePoint;
         const last = pts[pts.length - 1];
-
-        // Snap indicator: highlight first dot when cursor is near it
         if (pts.length >= 3 && dots.length > 0) {
           const d = Math.hypot(ptr.x - pts[0].x, ptr.y - pts[0].y);
           dots[0].set(d <= CLOSE_DIST
             ? { radius: 7, fill: color, strokeWidth: 2 }
             : { radius: 5, fill: "#ffffff", strokeWidth: 1.5 });
         }
-
-        // Rubber-band line: dashed preview from last point to cursor
         if (rubberLine) canvas.remove(rubberLine);
         rubberLine = new Line([last.x, last.y, ptr.x, ptr.y], {
           stroke: color, strokeWidth: Math.max(1, strokeWidth - 1),
@@ -578,12 +746,11 @@ export function useFabricCanvas(
           selectable: false, evented: false, objectCaching: false,
         });
         canvas.add(rubberLine);
-        canvas.renderAll();
+        canvas.requestRenderAll();
       };
 
       const onDblClick = () => {
         if (done) return;
-        // The second mousedown of the dblclick already pushed a point — undo it
         if (pts.length > 0) {
           pts.pop();
           const lastDot = dots.pop();
@@ -591,7 +758,7 @@ export function useFabricCanvas(
           refreshPath();
         }
         pts.length >= 3 ? commit() : cleanupTemp();
-        if (!done) { pts.length = 0; canvas.renderAll(); }
+        if (!done) { pts.length = 0; canvas.requestRenderAll(); }
       };
 
       canvas.on("mouse:down",     onDown);
@@ -602,7 +769,6 @@ export function useFabricCanvas(
         canvas.off("mouse:down",     onDown);
         canvas.off("mouse:move",     onMove);
         canvas.off("mouse:dblclick", onDblClick);
-        // Auto-close when switching away (≥3 pts → commit; else discard)
         if (!done) commit();
         isDrawingShapeRef.current = false;
       };
@@ -610,36 +776,33 @@ export function useFabricCanvas(
 
     if (tool === "eraser") {
       const onDown = (e: any) => {
+        if (isDraggingRef.current) return;
         const target = e.target;
-        if (target) { canvas.remove(target); canvas.renderAll(); }
+        if (target) { canvas.remove(target); canvas.requestRenderAll(); }
       };
       canvas.on("mouse:down", onDown);
       return () => { canvas.off("mouse:down", onDown); };
     }
   }, [tool, color, strokeWidth, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Deserialise (load from backend) ─────────────────────────────────────
-  // Sets the loaded state as the base history entry (undo can't go past this).
+  // ─── Deserialize ─────────────────────────────────────────────────────────
   const deserialize = useCallback((data: AnnotationData) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    // Suppress the object:added events that paintCanvas will fire
     canvas.off("object:added");
     isRestoringRef.current = true;
-
     paintCanvas(canvas, data);
-
     isRestoringRef.current = false;
 
-    // Seed history with the just-loaded state so undo can't go past it
     historyRef.current    = [data];
     historyIdxRef.current = 0;
     setHistoryIdx(0);
 
-    // Re-attach the unified change listener
     const notify = () => recordChangeRef.current();
     canvas.on("object:added", notify);
+
+    updateLayers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Undo / Redo ─────────────────────────────────────────────────────────
@@ -651,8 +814,9 @@ export function useFabricCanvas(
     isRestoringRef.current = true;
     paintCanvas(canvas, historyRef.current[historyIdxRef.current]);
     isRestoringRef.current = false;
-    onChangeRef.current?.(); // mark dirty
-  }, []);
+    onChangeRef.current?.();
+    updateLayers();
+  }, [updateLayers]);
 
   const redo = useCallback(() => {
     const canvas = fabricRef.current;
@@ -662,21 +826,22 @@ export function useFabricCanvas(
     isRestoringRef.current = true;
     paintCanvas(canvas, historyRef.current[historyIdxRef.current]);
     isRestoringRef.current = false;
-    onChangeRef.current?.(); // mark dirty
-  }, []);
+    onChangeRef.current?.();
+    updateLayers();
+  }, [updateLayers]);
 
   const canUndo = historyIdx > 0;
   const canRedo = historyIdx < historyRef.current.length - 1;
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // ─── Clear / Delete ───────────────────────────────────────────────────────
   const clearAll = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     isRestoringRef.current = true;
-    canvas.clear();
-    canvas.renderAll();
+    canvas.remove(...canvas.getObjects());
+    canvas.requestRenderAll();
     isRestoringRef.current = false;
-    recordChangeRef.current(); // one history entry for the whole clear
+    recordChangeRef.current();
   }, []);
 
   const deleteSelected = useCallback(() => {
@@ -685,39 +850,204 @@ export function useFabricCanvas(
     const selected = canvas.getActiveObjects();
     if (selected.length === 0) return;
     isRestoringRef.current = true;
-    selected.forEach((o) => canvas.remove(o));
+    canvas.remove(...selected);
     canvas.discardActiveObject();
-    canvas.renderAll();
+    canvas.requestRenderAll();
     isRestoringRef.current = false;
-    recordChangeRef.current(); // one history entry for the whole deletion
+    recordChangeRef.current();
   }, []);
 
-  const downloadAnnotated = useCallback((imageEl: HTMLImageElement, filename = "annotated-image.png") => {
+  // ─── Download ─────────────────────────────────────────────────────────────
+  const downloadAnnotated = useCallback((_?: HTMLImageElement, filename = "annotated-image.png") => {
     const canvas = fabricRef.current;
-    if (!canvas || !imageEl) return;
-
-    const W = canvas.width!;
-    const H = canvas.height!;
-
-    const offscreen = document.createElement("canvas");
-    offscreen.width  = W;
-    offscreen.height = H;
-    const ctx = offscreen.getContext("2d")!;
-
-    // Draw the base photo first
-    ctx.drawImage(imageEl, 0, 0, W, H);
-
-    // Overlay the Fabric annotation layer (transparent background PNG)
-    const annotImg = new Image();
-    annotImg.onload = () => {
-      ctx.drawImage(annotImg, 0, 0, W, H);
-      const link = document.createElement("a");
-      link.download = filename;
-      link.href = offscreen.toDataURL("image/png");
-      link.click();
-    };
-    annotImg.src = canvas.toDataURL({ format: "png" });
+    if (!canvas) return;
+    const prevVpt = [...canvas.viewportTransform!] as [number, number, number, number, number, number];
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    canvas.requestRenderAll();
+    const dataURL = canvas.toDataURL({ format: "png", multiplier: 1 });
+    canvas.setViewportTransform(prevVpt);
+    canvas.requestRenderAll();
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = dataURL;
+    link.click();
   }, []);
 
-  return { fabricRef, serialize, deserialize, clearAll, deleteSelected, undo, redo, canUndo, canRedo, downloadAnnotated };
+  // ─── Layer management ─────────────────────────────────────────────────────
+  const bringForward = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    canvas.bringObjectForward(obj);
+    canvas.requestRenderAll();
+    updateLayers();
+    recordChangeRef.current();
+  }, [updateLayers]);
+
+  const sendBackward = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    canvas.sendObjectBackwards(obj);
+    canvas.requestRenderAll();
+    updateLayers();
+    recordChangeRef.current();
+  }, [updateLayers]);
+
+  const bringToFront = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    canvas.bringObjectToFront(obj);
+    canvas.requestRenderAll();
+    updateLayers();
+    recordChangeRef.current();
+  }, [updateLayers]);
+
+  const sendToBack = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    canvas.sendObjectToBack(obj);
+    canvas.requestRenderAll();
+    updateLayers();
+    recordChangeRef.current();
+  }, [updateLayers]);
+
+  const setLayerVisibility = useCallback((id: string, visible: boolean) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    obj.visible = visible;
+    if (!visible) {
+      if (canvas.getActiveObject() === obj) canvas.discardActiveObject();
+      obj.selectable = false;
+    }
+    canvas.requestRenderAll();
+    updateLayers();
+    recordChangeRef.current();
+  }, [updateLayers]);
+
+  const selectLayerObject = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj || obj.visible === false) return;
+    obj.selectable = true;
+    canvas.setActiveObject(obj);
+    canvas.requestRenderAll();
+  }, []);
+
+  const deleteById = useCallback((id: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    isRestoringRef.current = true;
+    if (canvas.getActiveObject() === obj) canvas.discardActiveObject();
+    canvas.remove(obj);
+    canvas.requestRenderAll();
+    isRestoringRef.current = false;
+    recordChangeRef.current();
+  }, []);
+
+  // ─── Resize (window / container resize) ──────────────────────────────────
+  const resizeCanvasRef = useRef<(w: number, h: number) => void>(() => {});
+
+  const resizeCanvas = useCallback((newW: number, newH: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas || newW <= 0 || newH <= 0) return;
+    const snapshot = serialize();
+    canvas.setDimensions({ width: newW, height: newH });
+    const wrapper = canvas.wrapperEl as HTMLElement;
+    if (wrapper) { wrapper.style.width = `${newW}px`; wrapper.style.height = `${newH}px`; }
+    // Re-scale backgroundImage
+    if (canvas.backgroundImage) {
+      const bg = canvas.backgroundImage as FabricImage;
+      bg.set({
+        scaleX: newW / (bg.width  ?? newW),
+        scaleY: newH / (bg.height ?? newH),
+      });
+    }
+    isRestoringRef.current = true;
+    paintCanvas(canvas, snapshot);
+    isRestoringRef.current = false;
+    updateLayers();
+  }, [serialize, updateLayers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  resizeCanvasRef.current = resizeCanvas;
+
+  // ─── Zoom controls ─────────────────────────────────────────────────────────
+  const zoomIn = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const zoom = Math.min(+(canvas.getZoom() * 1.25).toFixed(4), MAX_ZOOM);
+    canvas.zoomToPoint({ x: canvas.width! / 2, y: canvas.height! / 2 }, zoom);
+    canvas.requestRenderAll();
+    setCurrentZoom(zoom);
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const zoom = Math.max(+(canvas.getZoom() / 1.25).toFixed(4), MIN_ZOOM);
+    canvas.zoomToPoint({ x: canvas.width! / 2, y: canvas.height! / 2 }, zoom);
+    canvas.requestRenderAll();
+    setCurrentZoom(zoom);
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    canvas.requestRenderAll();
+    setCurrentZoom(1);
+  }, []);
+
+  // ─── Object properties ────────────────────────────────────────────────────
+  const renameObject = useCallback((id: string, name: string) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    (obj as any).annotationName = name || undefined;
+    recordChangeRef.current();
+  }, []);
+
+  const setObjectFillColor = useCallback((id: string, fillColor: string | null) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    if (fillColor) {
+      const opacity = (obj as any).annotationFillOpacity ?? DEFAULT_FILL_OPACITY;
+      obj.set({ fill: computeFill(fillColor, opacity) });
+      (obj as any).annotationFillColor   = fillColor;
+      (obj as any).annotationFillOpacity = opacity;
+    } else {
+      obj.set({ fill: "transparent" });
+      (obj as any).annotationFillColor   = undefined;
+      (obj as any).annotationFillOpacity = undefined;
+    }
+    canvas.requestRenderAll();
+    recordChangeRef.current();
+  }, []);
+
+  const setObjectFillOpacity = useCallback((id: string, opacity: number) => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getObjects().find(o => (o as any).annotationId === id);
+    if (!canvas || !obj) return;
+    const fillColor = (obj as any).annotationFillColor as string | undefined;
+    if (!fillColor) return;
+    obj.set({ fill: computeFill(fillColor, opacity) });
+    (obj as any).annotationFillOpacity = opacity;
+    canvas.requestRenderAll();
+    recordChangeRef.current();
+  }, []);
+
+  return {
+    fabricRef, serialize, deserialize, clearAll, deleteSelected, deleteById,
+    undo, redo, canUndo, canRedo, downloadAnnotated,
+    layerList, bringForward, sendBackward, bringToFront, sendToBack,
+    setLayerVisibility, selectLayerObject,
+    selectedId, renameObject, setObjectFillColor, setObjectFillOpacity,
+    resizeCanvas,
+    currentZoom, zoomIn, zoomOut, resetZoom,
+  };
 }

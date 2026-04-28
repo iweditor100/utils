@@ -252,16 +252,10 @@ function UploadRow({
                 </button>
             )}
 
-            {/* Annotate button — all images, JPG-only enforcement on click */}
+            {/* Annotate button — JPEG, PNG, and WebP images */}
             {upload.mimeType.startsWith("image/") && (
                 <button
-                    onClick={() => {
-                        if (upload.mimeType !== "image/jpeg") {
-                            toast.error("Only JPG/JPEG images can be annotated.");
-                            return;
-                        }
-                        navigate(`/uploads/${upload.id}/annotate`);
-                    }}
+                    onClick={() => navigate(`/uploads/${upload.id}/annotate`)}
                     className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 dark:hover:text-violet-400 transition-colors"
                     title="Annotate"
                 >

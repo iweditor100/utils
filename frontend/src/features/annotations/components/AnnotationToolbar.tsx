@@ -1,4 +1,8 @@
-import type { AnnotationTool } from "../types";
+import { useState } from "react";
+import type { AnnotationTool, LayerItem } from "../types";
+import { AnnotationLayers } from "./AnnotationLayers";
+
+const CLOSED_SHAPE_TYPES = new Set(["rect", "circle", "polygon"]);
 
 interface ToolDef {
   value: AnnotationTool;
@@ -136,6 +140,20 @@ interface Props {
   onUndo: () => void;
   onRedo: () => void;
   onDownload: () => void;
+  // Layer panel
+  layers: LayerItem[];
+  onBringForward: (id: string) => void;
+  onSendBackward: (id: string) => void;
+  onBringToFront: (id: string) => void;
+  onSendToBack: (id: string) => void;
+  onToggleVisibility: (id: string, visible: boolean) => void;
+  onSelectObject: (id: string) => void;
+  onDeleteObject: (id: string) => void;
+  // Object properties
+  selectedLayer: LayerItem | null;
+  onRename: (id: string, name: string) => void;
+  onSetFillColor: (id: string, fillColor: string | null) => void;
+  onSetFillOpacity: (id: string, opacity: number) => void;
 }
 
 export function AnnotationToolbar({
@@ -155,9 +173,26 @@ export function AnnotationToolbar({
   onUndo,
   onRedo,
   onDownload,
+  layers,
+  onBringForward,
+  onSendBackward,
+  onBringToFront,
+  onSendToBack,
+  onToggleVisibility,
+  onSelectObject,
+  onDeleteObject,
+  selectedLayer,
+  onRename,
+  onSetFillColor,
+  onSetFillOpacity,
 }: Props) {
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showFillPicker, setShowFillPicker] = useState(false);
+  const showStroke = tool !== "text" && tool !== "eraser" && tool !== "select";
+
   return (
-    <div className="w-56 shrink-0 flex flex-col border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] overflow-y-auto">
+    <div className="flex flex-col">
 
       {/* ── Section: History (Undo / Redo) ── */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800">
@@ -250,76 +285,292 @@ export function AnnotationToolbar({
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Color</span>
-            <label className="flex items-center gap-1.5 cursor-pointer group">
+            <button
+              onClick={() => setShowColorPicker(s => !s)}
+              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+              title="Open color picker"
+            >
               <span
-                className="w-5 h-5 rounded border border-gray-200 dark:border-gray-700 shadow-sm group-hover:ring-2 group-hover:ring-red-200 dark:group-hover:ring-red-900 transition-all"
+                className="w-5 h-5 rounded border border-gray-200 dark:border-gray-600 shadow-sm"
                 style={{ backgroundColor: color }}
               />
               <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 uppercase">
                 {color}
               </span>
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => onColorChange(e.target.value)}
-                className="sr-only"
-              />
-            </label>
+            </button>
           </div>
 
-          {/* Preset swatches */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => onColorChange(c)}
-                title={c}
-                className={`
-                  w-5 h-5 rounded-full transition-all border
-                  ${color === c
-                    ? "ring-2 ring-offset-1 ring-red-400 scale-110 border-transparent"
-                    : "border-gray-200 dark:border-gray-700 hover:scale-110"
-                  }
-                  ${c === "#ffffff" ? "border-gray-200 dark:border-gray-600" : "border-transparent"}
-                `}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
+          {/* Inline color picker popover */}
+          {showColorPicker && (
+            <div className="flex flex-col gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+
+              {/* Preset swatches — larger, easier to tap */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => onColorChange(c)}
+                    title={c}
+                    className={`
+                      w-full aspect-square rounded-lg transition-all border
+                      ${color === c
+                        ? "ring-2 ring-offset-1 ring-red-400 scale-105 border-transparent"
+                        : "border-gray-200 dark:border-gray-600 hover:scale-105"
+                      }
+                    `}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+
+              {/* Hex text input */}
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-6 h-6 rounded shrink-0 border border-gray-200 dark:border-gray-600"
+                  style={{ backgroundColor: color }}
+                />
+                <input
+                  type="text"
+                  value={color}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onColorChange(v);
+                  }}
+                  placeholder="#ef4444"
+                  maxLength={7}
+                  className="
+                    flex-1 text-[11px] font-mono px-2 py-1 rounded-lg border
+                    border-gray-200 dark:border-gray-700
+                    bg-white dark:bg-gray-900
+                    text-gray-700 dark:text-gray-300
+                    focus:outline-none focus:ring-1 focus:ring-red-400
+                  "
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Native color wheel */}
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => onColorChange(e.target.value)}
+                  className="w-8 h-8 rounded cursor-pointer border border-gray-200 dark:border-gray-600 p-0.5 bg-white dark:bg-gray-900"
+                />
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">
+                  Custom color wheel
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Always-visible small preset row when picker is closed */}
+          {!showColorPicker && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onColorChange(c)}
+                  title={c}
+                  className={`
+                    w-5 h-5 rounded-full transition-all border
+                    ${color === c
+                      ? "ring-2 ring-offset-1 ring-red-400 scale-110 border-transparent"
+                      : "border-gray-200 dark:border-gray-700 hover:scale-110"
+                    }
+                    ${c === "#ffffff" ? "border-gray-200 dark:border-gray-600" : "border-transparent"}
+                  `}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Stroke width */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Stroke</span>
-            <span className="text-xs font-semibold font-mono text-red-500 tabular-nums">
-              {strokeWidth}px
-            </span>
+        {/* Stroke width — hidden for tools where it has no effect */}
+        {showStroke && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                {tool === "pin" ? "Size" : "Stroke"}
+              </span>
+              <span className="text-xs font-semibold font-mono text-red-500 tabular-nums">
+                {strokeWidth}px
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              value={strokeWidth}
+              onChange={(e) => onStrokeWidthChange(Number(e.target.value))}
+              className="
+                w-full h-1 appearance-none rounded-full cursor-pointer
+                bg-gray-100 dark:bg-gray-800
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:w-3.5
+                [&::-webkit-slider-thumb]:h-3.5
+                [&::-webkit-slider-thumb]:rounded-full
+                [&::-webkit-slider-thumb]:bg-red-500
+                [&::-webkit-slider-thumb]:cursor-pointer
+                [&::-webkit-slider-thumb]:shadow-sm
+              "
+            />
+            <div className="flex justify-between text-[9px] text-gray-300 dark:text-gray-700">
+              <span>Thin</span>
+              <span>Thick</span>
+            </div>
           </div>
-          <input
-            type="range"
-            min={1}
-            max={20}
-            value={strokeWidth}
-            onChange={(e) => onStrokeWidthChange(Number(e.target.value))}
-            className="
-              w-full h-1 appearance-none rounded-full cursor-pointer
-              bg-gray-100 dark:bg-gray-800
-              [&::-webkit-slider-thumb]:appearance-none
-              [&::-webkit-slider-thumb]:w-3.5
-              [&::-webkit-slider-thumb]:h-3.5
-              [&::-webkit-slider-thumb]:rounded-full
-              [&::-webkit-slider-thumb]:bg-red-500
-              [&::-webkit-slider-thumb]:cursor-pointer
-              [&::-webkit-slider-thumb]:shadow-sm
-            "
-          />
-          <div className="flex justify-between text-[9px] text-gray-300 dark:text-gray-700">
-            <span>Thin</span>
-            <span>Thick</span>
-          </div>
-        </div>
+        )}
       </div>
+
+      {/* ── Section: Properties (shown when an object is selected) ── */}
+      {selectedLayer && (
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">
+            Properties
+          </p>
+
+          {/* Name */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Name</label>
+            <input
+              type="text"
+              value={selectedLayer.name ?? ""}
+              onChange={e => onRename(selectedLayer.id, e.target.value)}
+              placeholder="e.g. area1, zone-A"
+              maxLength={48}
+              className="
+                w-full text-xs px-2.5 py-1.5 rounded-lg border
+                border-gray-200 dark:border-gray-700
+                bg-white dark:bg-gray-900
+                text-gray-700 dark:text-gray-300
+                placeholder-gray-300 dark:placeholder-gray-600
+                focus:outline-none focus:ring-1 focus:ring-red-400
+              "
+            />
+          </div>
+
+          {/* Fill color — only for closed shapes */}
+          {CLOSED_SHAPE_TYPES.has(selectedLayer.type) && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Fill</label>
+                <div className="flex items-center gap-2">
+                  {/* Clear fill button */}
+                  {selectedLayer.fillColor && (
+                    <button
+                      onClick={() => { onSetFillColor(selectedLayer.id, null); setShowFillPicker(false); }}
+                      title="Remove fill"
+                      className="text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowFillPicker(s => !s)}
+                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    title="Pick fill color"
+                  >
+                    <span
+                      className="w-5 h-5 rounded border border-gray-200 dark:border-gray-600 shadow-sm"
+                      style={{
+                        backgroundColor: selectedLayer.fillColor ?? "transparent",
+                        backgroundImage: !selectedLayer.fillColor
+                          ? "repeating-linear-gradient(45deg,#ccc 0,#ccc 1px,transparent 0,transparent 50%)"
+                          : undefined,
+                        backgroundSize: "4px 4px",
+                      }}
+                    />
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 uppercase">
+                      {selectedLayer.fillColor ?? "none"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {showFillPicker && (
+                <div className="flex flex-col gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => onSetFillColor(selectedLayer.id, c)}
+                        title={c}
+                        className={`
+                          w-full aspect-square rounded-lg transition-all border
+                          ${selectedLayer.fillColor === c
+                            ? "ring-2 ring-offset-1 ring-red-400 scale-105 border-transparent"
+                            : "border-gray-200 dark:border-gray-600 hover:scale-105"
+                          }
+                        `}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="color"
+                      value={selectedLayer.fillColor ?? "#ef4444"}
+                      onChange={e => onSetFillColor(selectedLayer.id, e.target.value)}
+                      className="w-8 h-8 rounded cursor-pointer border border-gray-200 dark:border-gray-600 p-0.5 bg-white dark:bg-gray-900"
+                    />
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">
+                      Custom fill color
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Density / opacity slider — only when a fill color is set */}
+              {selectedLayer.fillColor && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Density</span>
+                    <span className="text-xs font-semibold font-mono text-red-500 tabular-nums">
+                      {Math.round((selectedLayer.fillOpacity ?? 0.4) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round((selectedLayer.fillOpacity ?? 0.4) * 100)}
+                    onChange={e => onSetFillOpacity(selectedLayer.id, Number(e.target.value) / 100)}
+                    className="
+                      w-full h-1 appearance-none rounded-full cursor-pointer
+                      bg-gray-100 dark:bg-gray-800
+                      [&::-webkit-slider-thumb]:appearance-none
+                      [&::-webkit-slider-thumb]:w-3.5
+                      [&::-webkit-slider-thumb]:h-3.5
+                      [&::-webkit-slider-thumb]:rounded-full
+                      [&::-webkit-slider-thumb]:bg-red-500
+                      [&::-webkit-slider-thumb]:cursor-pointer
+                      [&::-webkit-slider-thumb]:shadow-sm
+                    "
+                  />
+                  <div className="flex justify-between text-[9px] text-gray-300 dark:text-gray-700">
+                    <span>Ghost</span>
+                    <span>Solid</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Section: Layers ── */}
+      <AnnotationLayers
+        layers={layers}
+        onBringForward={onBringForward}
+        onSendBackward={onSendBackward}
+        onBringToFront={onBringToFront}
+        onSendToBack={onSendToBack}
+        onToggleVisibility={onToggleVisibility}
+        onSelectObject={onSelectObject}
+        onDeleteObject={onDeleteObject}
+      />
 
       {/* ── Section: Actions ── */}
       <div className="px-4 pt-4 pb-4 flex flex-col gap-2 mt-auto">
@@ -345,23 +596,49 @@ export function AnnotationToolbar({
           Delete Selected
         </button>
 
-        <button
-          onClick={onClear}
-          title="Clear all annotations"
-          className="
-            w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
-            text-red-500 dark:text-red-400
-            bg-red-50 dark:bg-red-950/30
-            border border-red-100 dark:border-red-900/50
-            hover:bg-red-100 dark:hover:bg-red-950/60
-            transition-colors
-          "
-        >
-          <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          Clear All
-        </button>
+        {confirmClear ? (
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => { onClear(); setConfirmClear(false); }}
+              className="
+                flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-semibold
+                text-white bg-red-500 hover:bg-red-600 border border-red-500 transition-colors
+              "
+            >
+              Yes, clear
+            </button>
+            <button
+              onClick={() => setConfirmClear(false)}
+              className="
+                flex-1 flex items-center justify-center px-2 py-2 rounded-lg text-xs font-medium
+                text-gray-600 dark:text-gray-400
+                bg-gray-50 dark:bg-gray-800/60
+                border border-gray-100 dark:border-gray-800
+                hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors
+              "
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmClear(true)}
+            title="Clear all annotations"
+            className="
+              w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
+              text-red-500 dark:text-red-400
+              bg-red-50 dark:bg-red-950/30
+              border border-red-100 dark:border-red-900/50
+              hover:bg-red-100 dark:hover:bg-red-950/60
+              transition-colors
+            "
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Clear All
+          </button>
+        )}
 
         <button
           onClick={onDownload}

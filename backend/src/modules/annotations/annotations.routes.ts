@@ -6,7 +6,7 @@ import { saveAnnotationSchema, uploadIdParamSchema, } from "./annotations.schema
 
 const router = Router();
 
-// router.use(authenticateMiddleware);
+router.use(authenticateMiddleware);
 
 router.post("/", validate(saveAnnotationSchema, "body"), saveAnnotationController);
 router.get("/:uploadId", validate(uploadIdParamSchema, "params"), getAnnotationController);

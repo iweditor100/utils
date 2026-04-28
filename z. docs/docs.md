@@ -670,7 +670,7 @@ How is the download working?
 
   ## Frontend Features
 
-  ### Drawing Tool. 
+  ### Drawing Tool / Annotation Tool. 
   This is an mvp which gives the liberty to user to draw on the images, 
   It takes a jpg and gives the user a feature to draw on them, (used for drone shots, telling what area a land covers) and more
 
@@ -699,12 +699,154 @@ How is the download working?
   all of them have: color
 
   saveAnnotationSchema = uploadId, and data(should be max 500 characters), 
+  uploadIdParamSchema = uploadId,
+
+
+  ##### Routes. 
+  POST: /annotations/
+  -> The uploadId and the data are attached in the req.body, below i s the data. 
+  ```
+   data: {
+      objects: [
+         {
+            zIndex: 0,
+            visible: true,
+            id: '040a448e-f0b1-4b6a-900c-c5418fee6edd',
+               type: 'polygon',
+               points: [Array],
+               color: '#ffffff',
+               strokeWidth: 17
+            },
+            {
+               zIndex: 1,
+               visible: true,
+               id: '75c77185-1bea-4b13-ab96-c06efb307d56',
+               type: 'pin',
+               x: 0.40880760642271347,
+               y: 0.5929100435832112,
+               color: '#ef4444',
+               size: 22.198307214177
+            },
+            {
+               zIndex: 2,
+               visible: true,
+               id: '1a852072-2d21-49a4-b308-8b8207622779',
+               type: 'polygon',
+               points: [Array],
+               color: '#ffffff',
+               strokeWidth: 12
+            },
+            {
+               zIndex: 3,
+               visible: true,
+               id: '3d5b199a-858b-4d50-a4b4-c502cc5daa97',
+               type: 'pin',
+               x: 0.8568481848184818,
+               y: 0.40924092409240925,
+               color: '#ef4444',
+               size: 20
+            },
+            {
+               zIndex: 4,
+               visible: true,
+               id: 'bcd52284-a972-47e6-8f20-924eaa801656',
+               type: 'freedraw',
+               path: [Array],
+               refW: 1212,
+               refH: 909,
+               left: 0.8481848184818482,
+               top: 0.7448798530666962,
+               color: '#3b82f6',
+               strokeWidth: 20
+            }
+         ]
+      }
+      uploadId: "06d681e4-4c51-4197-857d-ca7b0f29b8ef"
+
+
+   ```
+  
+
+  saveAnnotationController: 
+  it takes in the uploadId and the data, and then calls the service , const annotation = await saveAnnotation(uploadId, userId, data);
+  logged is implemented there. 
+
+  saveAnnotation service: 
+  1. check if the objects in inside the data are less than the allowed max objects . 
+  2. check if the upload is valid. 
+  3. check is the person creating the annotation is the owner of the upload. 
+  4. check if the upload is allowed type on which the annotation can be made. 
+  5. then upsertAnnotation, why upsert? -> you know it. 
+
+
+
+  GET: /annotations/:uploadId
 
 
   
 
   #### Frontend. 
-  <will get to this later>
+  This is a big one. 
+
+  ##### API: saveAnnotation and getAnnotation
+
+  ##### Hook: useAnnotationState. 
+  This is the hook that uses the api endpoints, validates the types. 
+
+  1. calls the api to get the annotation first, if ther is no upload id then skip this. 
+  this will return data, the response the json which is getting returned from the backend. 
+
+  2. check if the canvas is dirty or not. 
+  3. has a function to save the annotations. 
+  4. rawAnnotationData = if there is already uploaded annotation then its data, 
+  5. savedData = the data that is currently on the canvas, if that isn't an array then we will make it null. 
+
+
+  ##### Canvas
+  ##### Hook used: useFabricCanvas.ts
+  this is a wrapper we created around the library fabric js, which we are using to create the canvas. 
+  features it gives: 
+  1. tools, 
+  2. undo/redo
+  3. layers
+  4. save/load
+  5. download
+
+  The constants: 
+  const PIN_PATH_DATA = "M 9,0 C 4.029,0 0,4.029 0,9 C 0,15.75 9,24 9,24 C 9,24 18,15.75 18,9 C 18,4.029 13.971,0 9,0 Z M 12,9 A 3,3 0 1,0 6,9 A 3,3 0 1,0 12,9 Z";  // this is the svg path for the pin shape, 
+
+  fabric Js can render svg paths directly via: new Path(...);
+
+  tag() ----> The meta data system. 
+  function tag(fabricObj, type, color, visible) 
+  Fabric Objects: they are just canvas shapes, they have no concept of : this is an annotation rect with id X. So Tag() monkey-patch custom properties directly onto the Fabric Object: 
+
+  fabricObj.annotationId = id; 
+  fabricObj.annotationType = type; 
+  fabricObj.annotationColor = color; 
+
+  This helps us find the object with the annotation ID later. 
+
+
+  paintCanvas() -> the Renderer
+
+  function paint(canvas, data)
+
+  This takes a plain JS data object(AnnotationData) and rebuilds the entire canvas from scratch. 
+
+  1. canvas.clear() -> wipe everything. 
+  2. Sort by Z index (so layers are in the right stacking order)
+  3. Loop through each saved object, create the matching Fabric Shape, call tag() and canvas.add()
+  
+
+
+
+
+  
+  
+
+
+
 
 
   ---
@@ -888,6 +1030,31 @@ An ImageWorker that is listening to the imageQueue consumes it and performs the 
 
    ``` when i logout of one window in the other window I am still able to access the system```
 
+   ``` in the v2: give a feature of editing the website inspired from pixieset and the wix website editor. ``` 
+
+
+   ``` give a section of the contact form ```
 
 
 
+   ``` XML Sitemap of the application, on the custom domain.  ```
+
+   ``` rate limiting ```
+
+
+
+   ``` Rbac:```
+   ``` later when the team increases from 1 single user to multiple users.  ```
+
+   ``` Skeletons ```
+
+`
+   
+   ``` Admin ```
+   ``` 
+      Admin: Keep the admin frontend and backend different. 
+      PostHOG.com: for event tracking. 
+   ```
+
+
+   ``` common app error: message, name, code ```
